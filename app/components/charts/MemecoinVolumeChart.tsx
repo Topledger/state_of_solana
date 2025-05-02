@@ -102,6 +102,10 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
   const [isModalBrushActive, setIsModalBrushActive] = useState(false);
   const [modalFilteredData, setModalFilteredData] = useState<FormattedMemecoinVolumeData>({ dates: [], series: [], totalsByToken: [] });
   
+  // Chart container refs
+  const chartRef = useRef<HTMLDivElement>(null);
+  const modalChartRef = useRef<HTMLDivElement>(null);
+  
   // Shared tooltip state
   const [tooltip, setTooltip] = useState({ 
     visible: false, 
@@ -381,6 +385,7 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>, isModal = false) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
     const margin = { left: 45 };
     const innerWidth = rect.width - margin.left - 20;
     
@@ -418,8 +423,8 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
         setTooltip({
           visible: true,
           data: { date, tokens },
-          left: e.clientX,
-          top: e.clientY
+          left: mouseX,
+          top: mouseY
         });
       }
     }
@@ -563,14 +568,14 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
               value: formatVolume(token.volume),
               shape: 'square'
             }))}
-            top={tooltip.top - (isModal ? 50 : 240)}
-            left={tooltip.left - (isModal ? 50 : 240)}
+            top={tooltip.top}
+            left={tooltip.left}
             isModal={isModal}
           />
         )}
         
         {/* Main chart */}
-        <div className="h-[85%] w-full overflow-hidden"
+        <div className="h-[85%] w-full overflow-hidden relative" ref={isModal ? modalChartRef : chartRef}
           onMouseMove={(e) => handleMouseMove(e, isModal)}
           onMouseLeave={handleMouseLeave}
         >
@@ -683,7 +688,24 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
                       tickStroke="transparent" 
                       tickLength={0} 
                       numTicks={5}
-                      tickFormat={(value) => formatVolume(Number(value))}
+                      tickFormat={(value) => {
+                        const val = Number(value);
+                        if (val === 0) return '$0';
+                        
+                        if (val >= 1e9) {
+                          return `$${Math.round(val / 1e9)}B`;
+                        }
+                        
+                        if (val >= 1e6) {
+                          return `$${Math.round(val / 1e6)}M`;
+                        }
+                        
+                        if (val >= 1e3) {
+                          return `$${Math.round(val / 1e3)}K`;
+                        }
+                        
+                        return `$${val}`;
+                      }}
                       tickLabelProps={() => ({ 
                         fill: memecoinVolumeColors.tickLabels, 
                         fontSize: 11, 
@@ -746,7 +768,7 @@ const MemecoinVolumeChart: React.FC<MemecoinVolumeChartProps> = ({
           {/* Chart with legends in modal */}
           <div className="flex h-full">
             {/* Chart area - 90% width */}
-            <div className="w-[90%] h-full pr-3 border-r border-gray-900">
+            <div className="w-[90%] h-full pr-3 border-r border-gray-900 relative">
               {renderChartContent(0, 0, true)}
             </div>
             

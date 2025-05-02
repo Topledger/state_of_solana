@@ -493,7 +493,24 @@ return (
                       tickStroke="transparent" 
                       tickLength={0} 
                       numTicks={5}
-                  tickFormat={(value) => formatVolume(value as number)}
+                  tickFormat={(value) => {
+                    const val = Number(value);
+                    if (val === 0) return '$0';
+                    
+                    if (val >= 1e9) {
+                      return `$${Math.round(val / 1e9)}B`;
+                    }
+                    
+                    if (val >= 1e6) {
+                      return `$${Math.round(val / 1e6)}M`;
+                    }
+                    
+                    if (val >= 1e3) {
+                      return `$${Math.round(val / 1e3)}K`;
+                    }
+                    
+                    return `$${val}`;
+                  }}
                   tickLabelProps={() => ({ 
                         fill: volumeHistoryColors.tickLabels, 
                         fontSize: 11, 

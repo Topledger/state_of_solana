@@ -349,7 +349,7 @@ export default function DexVolumePage() {
             </div>
             
             {/* Legend Area - horizontal on mobile, vertical on desktop with scrolling */}
-            <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
+            <div className="w-full lg:w-1/4 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
               <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 pt-1 pb-0 h-full w-full overflow-hidden">
                 <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 w-full h-full overflow-y-auto
                   [&::-webkit-scrollbar]:w-1.5 

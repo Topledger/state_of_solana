@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ParentSize } from '@visx/responsive';
 import { Pie } from '@visx/shape';
 import { Group } from '@visx/group';
@@ -85,6 +85,10 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
     x: 0,
     y: 0
   });
+  
+  // Reference to the chart container
+  const chartRef = useRef<HTMLDivElement>(null);
+  const modalChartRef = useRef<HTMLDivElement>(null);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -137,15 +141,30 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
     });
   };
 
+  // Get the global color scale for the component
+  const mainColorScale = data.length > 0 ? getColorScale(data) : null;
+
   // Handle tooltip
-  const handleTooltip = (isVisible: boolean, dataPoint: VolumeByProgramDataPoint | null, event: React.MouseEvent) => {
+  const handleTooltip = (isVisible: boolean, dataPoint: VolumeByProgramDataPoint | null, event: React.MouseEvent, isModal: boolean = false) => {
     if (isVisible && dataPoint) {
-      setTooltip({
-        visible: true,
-        data: dataPoint,
-        x: event.clientX,
-        y: event.clientY
-      });
+      // Get the chart element reference
+      const chartEl = isModal ? modalChartRef.current : chartRef.current;
+      
+      if (chartEl) {
+        // Get the bounding rectangle of the chart container
+        const rect = chartEl.getBoundingClientRect();
+        
+        // Calculate x and y coordinates relative to the chart container
+        const xInChart = event.clientX - rect.left;
+        const yInChart = event.clientY - rect.top;
+        
+        setTooltip({
+          visible: true,
+          data: dataPoint,
+          x: xInChart,
+          y: yInChart
+        });
+      }
     } else {
       setTooltip(prev => ({ ...prev, visible: false }));
     }
@@ -181,6 +200,7 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
   const renderChartContent = (isModal: boolean = false) => {
     const chartData = isModal ? modalData : data;
     const isChartLoading = isModal ? modalLoading : loading;
+    const currentRef = isModal ? modalChartRef : chartRef;
     
     if (isChartLoading) {
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
@@ -215,7 +235,7 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
     const colorScale = getColorScale(chartData);
     
     return (
-      <div className="h-full w-full">
+      <div className="h-full w-full relative" ref={currentRef}>
         {tooltip.visible && tooltip.data && (
           <ChartTooltip
             title={tooltip.data.dex}
@@ -233,8 +253,9 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
                 shape: 'square' 
               }
             ]}
-            top={tooltip.y - 100}
-            left={tooltip.x + 10}
+            top={tooltip.y}
+            left={tooltip.x}
+            isModal={isModal}
           />
         )}
         
@@ -266,8 +287,8 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
                         return (
                           <g 
                             key={`arc-${arcData.dex}-${index}`}
-                            onMouseMove={(e) => handleTooltip(true, arcData, e)}
-                            onMouseLeave={() => handleTooltip(false, null, null as any)}
+                            onMouseMove={(e) => handleTooltip(true, arcData, e, isModal)}
+                            onMouseLeave={() => handleTooltip(false, null, null as any, isModal)}
                           >
                             <path
                               d={pie.path(arc) || ''}
@@ -341,7 +362,31 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
   };
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative" ref={chartRef}>
+      {/* Tooltip for the main chart */}
+      {tooltip.visible && tooltip.data && mainColorScale && (
+        <ChartTooltip
+          title={tooltip.data.dex}
+          items={[
+            { 
+              color: mainColorScale(tooltip.data.dex) as string, 
+              label: 'Volume', 
+              value: formatVolume(tooltip.data.volume), 
+              shape: 'square' 
+            },
+            { 
+              color: mainColorScale(tooltip.data.dex) as string, 
+              label: 'Share', 
+              value: `${tooltip.data.percentage.toFixed(1)}%`, 
+              shape: 'square' 
+            }
+          ]}
+          top={tooltip.y}
+          left={tooltip.x}
+          isModal={false}
+        />
+      )}
+      
       {renderChartContent(false)}
       
       {/* Modal */}
@@ -355,7 +400,7 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
           {/* Chart with legends in modal */}
           <div className="flex h-full">
             {/* Chart area - left side */}
-            <div className="w-[80%] h-full pr-3 border-r border-gray-900">
+            <div className="w-[80%] h-full pr-3 border-r border-gray-900" ref={modalChartRef}>
               {renderChartContent(true)}
             </div>
             
@@ -393,17 +438,7 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
             </div>
           </div>
           
-          {/* Download button */}
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={() => downloadCSV(modalData)}
-              className="flex items-center space-x-1 text-xs bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 px-2 py-1 rounded transition-colors"
-              title="Download CSV Data"
-            >
-              <DownloadIcon className="w-3.5 h-3.5" />
-              <span>Download CSV</span>
-            </button>
-          </div>
+          
         </div>
       </Modal>
     </div>

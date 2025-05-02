@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 interface TooltipItem {
   color: string;
@@ -15,7 +15,7 @@ interface ChartTooltipProps {
   isModal?: boolean;
 }
 
-// Super simple tooltip with minimal DOM impact
+// Simple tooltip component with relative positioning
 const ChartTooltip: React.FC<ChartTooltipProps> = ({ 
   title, 
   items, 
@@ -23,18 +23,12 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   left = 0,
   isModal = false
 }) => {
-  useEffect(() => {
-    console.log('ChartTooltip rendered', { title, items, top, left, isModal });
-  }, [title, items, top, left, isModal]);
-
   return (
     <div 
-      className="absolute pointer-events-none"
+      className="absolute pointer-events-none z-[9999]"
       style={{
-        top: top + (isModal ? 100 : 0),
-        left: left + (isModal ? 80 : 60),
-        zIndex: 999, // Very high z-index to ensure visibility
-        position: 'absolute'
+        top: top,
+        left: left,
       }}
     >
       <div

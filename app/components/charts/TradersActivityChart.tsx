@@ -1,20 +1,22 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+"use client";
+
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { TradersDataPoint, fetchTradersData, formatLargeNumber, formatTraderDate } from '../../api/dex/traders/tradersData';
+import Modal from '../shared/Modal';
 import { ParentSize } from '@visx/responsive';
 import { Group } from '@visx/group';
+import { Bar } from '@visx/shape';
+import { LinePath } from '@visx/shape';
 import { GridRows } from '@visx/grid';
-import { scaleLinear, scaleBand, scaleTime } from '@visx/scale';
 import { AxisBottom, AxisLeft, AxisRight } from '@visx/axis';
-import { curveMonotoneX } from '@visx/curve';
-import { LinePath, Bar } from '@visx/shape';
-import { fetchTvlVelocityData, TimeFilter, TvlVelocityDataPoint } from '../../api/dex/summary/chartData';
+import { scaleBand, scaleLinear, scaleTime } from '@visx/scale';
 import Loader from '../shared/Loader';
 import ChartTooltip from '../shared/ChartTooltip';
-import ButtonSecondary from '../shared/buttons/ButtonSecondary';
-import Modal from '../shared/Modal';
-import TimeFilterSelector from '../shared/filters/TimeFilter';
 import BrushTimeScale from '../shared/BrushTimeScale';
+import ButtonSecondary from '../shared/buttons/ButtonSecondary';
+import { curveMonotoneX } from '@visx/curve';
 
-// Define RefreshIcon component directly in this file
+// Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
   return (
     <svg 
@@ -34,134 +36,103 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
   );
 };
 
-interface TvlVelocityChartProps {
-  timeFilter: TimeFilter;
-  isModalOpen?: boolean;
-  onModalClose?: () => void;
-}
-
-// Helper functions
-const formatTvl = (value: number) => `$${Math.round(value / 1e9)}B`;
-const formatVelocity = (value: number) => Number.isInteger(value) ? value.toString() : value.toFixed(1);
-const formatDate = (dateStr: string, timeFilter?: TimeFilter) => {
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    
-    switch(timeFilter) {
-      case 'Y': return date.getFullYear().toString();
-      case 'Q': return `Q${Math.floor(date.getMonth() / 3) + 1} ${date.getFullYear()}`;
-      case 'M': return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      case 'D':
-      default: return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-  } catch (e) {
-    return dateStr;
-  }
-};
-
-export const tvlVelocityColors = {
+// Chart colors for consistent styling
+export const tradersActivityChartColors = {
+  grid: '#1f2937',
   axisLines: '#374151',
   tickLabels: '#6b7280',
-  tvlBar: '#60a5fa',
-  velocityLine: '#a78bfa',
-  grid: '#1f2937',
+  activeTraders: '#60a5fa', // blue for bar chart
+  newTraders: '#f97316', // orange for new traders line
+  activationRatio: '#34d399', // green for activation ratio line
 };
 
 // Export a function to get chart colors for external use
-export const getTvlVelocityChartColors = () => {
+export const getTradersActivityChartColors = () => {
   return {
-    tvl: tvlVelocityColors.tvlBar,
-    velocity: tvlVelocityColors.velocityLine
+    activeTraders: tradersActivityChartColors.activeTraders,
+    newTraders: tradersActivityChartColors.newTraders,
+    activationRatio: tradersActivityChartColors.activationRatio,
   };
 };
 
-// Helper function to get available metrics from the data
-const getAvailableChartMetrics = (data: TvlVelocityDataPoint[], colors: { tvl: string, velocity: string }) => {
-  if (!data || data.length === 0) return [];
-  
-  // Get the first data point to extract property names
-  const samplePoint = data[0];
-  
-  // Filter out date and any other non-metric properties
-  return Object.keys(samplePoint)
-    .filter(key => key !== 'date')
-    .map(key => {
-      // Use proper display names for metrics
-      const displayNames: Record<string, string> = {
-        tvl: 'TVL',
-        velocity: 'Velocity'
-      };
-      
-      // Use the mapped display name or fallback to capitalized key
-      const displayName = displayNames[key] || key.charAt(0).toUpperCase() + key.slice(1);
-      
-      // Determine shape and color based on metric name
-      const isLine = key === 'velocity';
-      return {
-        key,
-        displayName,
-        shape: isLine ? 'circle' : 'square',
-        color: isLine ? colors.velocity : colors.tvl
-      };
-    });
+// Helper functions
+const formatActiveTraders = (value: number) => formatLargeNumber(value);
+const formatNewTraders = (value: number) => formatLargeNumber(value);
+const formatRatio = (value: number) => `${(value * 100).toFixed(1)}%`;
+const formatAxisDate = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 };
 
-const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({ 
-  timeFilter, 
-  isModalOpen = false, 
-  onModalClose = () => {} 
-}) => {
-  // Main chart data
-  const [data, setData] = useState<TvlVelocityDataPoint[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+interface TradersActivityChartProps {
+  isModalOpen: boolean;
+  onModalClose: () => void;
+}
+
+export default function TradersActivityChart({ 
+  isModalOpen, 
+  onModalClose,
+}: TradersActivityChartProps) {
+  // Main chart data states
+  const [data, setData] = useState<TradersDataPoint[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [filteredData, setFilteredData] = useState<TvlVelocityDataPoint[]>([]);
+  
+  // Filtering and brushing states
+  const [filteredData, setFilteredData] = useState<TradersDataPoint[]>([]);
   const [brushDomain, setBrushDomain] = useState<[Date, Date] | null>(null);
   const [isBrushActive, setIsBrushActive] = useState(false);
   
-  // Modal specific data
-  const [modalData, setModalData] = useState<TvlVelocityDataPoint[]>([]);
+  // Modal specific states
+  const [modalData, setModalData] = useState<TradersDataPoint[]>([]);
   const [modalLoading, setModalLoading] = useState<boolean>(true);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [modalTimeFilter, setModalTimeFilter] = useState<TimeFilter>(timeFilter);
   const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
   const [isModalBrushActive, setIsModalBrushActive] = useState(false);
-  const [modalFilteredData, setModalFilteredData] = useState<TvlVelocityDataPoint[]>([]);
+  const [modalFilteredData, setModalFilteredData] = useState<TradersDataPoint[]>([]);
   
   // Shared tooltip state
-  const [tooltip, setTooltip] = useState({ visible: false, dataPoint: null as TvlVelocityDataPoint | null, left: 0, top: 0 });
-
+  const [tooltip, setTooltip] = useState({ 
+    visible: false, 
+    dataPoint: null as TradersDataPoint | null, 
+    left: 0, 
+    top: 0 
+  });
+  
   // Add refs for chart containers
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const modalChartRef = useRef<HTMLDivElement>(null);
   
-  // Add refs for throttling
+  // Add refs for throttling brush updates
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const canUpdateFilteredDataRef = useRef<boolean>(true);
   const modalThrottleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const canUpdateModalFilteredDataRef = useRef<boolean>(true);
   
-  // Create a fetchData function that can be called to refresh data for main chart
+  // Fetch data from the API with enhanced loading states
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    console.log('[TradersActivityChart] Starting to fetch data');
+    setIsLoading(true);
     setError(null);
     try {
-      const chartData = await fetchTvlVelocityData(timeFilter);
-      if (chartData.length === 0) {
-        setError('No data available for this period.');
+      const fetchedData = await fetchTradersData();
+      console.log('[TradersActivityChart] Fetched data:', fetchedData.length, 'points');
+      
+      if (!fetchedData || fetchedData.length === 0) {
+        console.warn('[TradersActivityChart] No data returned from API');
+        setError('No data available from API');
         setData([]);
+        setFilteredData([]);
       } else {
-        setData(chartData);
-        setFilteredData(chartData);
+        setData(fetchedData);
+        setFilteredData(fetchedData);
         
         // Set brush as active but don't set a specific domain
-        // This will result in the full range being selected
         setIsBrushActive(true);
         setBrushDomain(null);
       }
     } catch (err) {
-      console.error('[Chart] Error loading chart data:', err);
+      console.error('[TradersActivityChart] Error fetching data:', err);
       let message = 'Failed to load data.';
       if (err instanceof Error) {
         message = err.message || message;
@@ -170,31 +141,34 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       setData([]);
       setFilteredData([]);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [timeFilter]);
-
+  }, []);
+  
   // Create a separate fetchData function for modal
   const fetchModalData = useCallback(async () => {
+    console.log('[TradersActivityChart] Starting to fetch modal data');
     setModalLoading(true);
     setModalError(null);
     try {
-      const chartData = await fetchTvlVelocityData(modalTimeFilter);
-      if (chartData.length === 0) {
-        setModalError('No data available for this period.');
+      const fetchedData = await fetchTradersData();
+      console.log('[TradersActivityChart] Fetched modal data:', fetchedData.length, 'points');
+      
+      if (!fetchedData || fetchedData.length === 0) {
+        console.warn('[TradersActivityChart] No modal data returned from API');
+        setModalError('No data available from API');
         setModalData([]);
         setModalFilteredData([]);
       } else {
-        setModalData(chartData);
-        setModalFilteredData(chartData);
+        setModalData(fetchedData);
+        setModalFilteredData(fetchedData);
         
         // Set brush as active but don't set a specific domain
-        // This will result in the full range being selected
         setIsModalBrushActive(true);
         setModalBrushDomain(null);
       }
     } catch (err) {
-      console.error('[Chart] Error loading modal chart data:', err);
+      console.error('[TradersActivityChart] Error fetching modal data:', err);
       let message = 'Failed to load data.';
       if (err instanceof Error) {
         message = err.message || message;
@@ -205,12 +179,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     } finally {
       setModalLoading(false);
     }
-  }, [modalTimeFilter]);
-
-  // Fetch data for main chart on mount and when timeFilter changes
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  }, []);
   
   // Handle brush change with throttling
   const handleBrushChange = useCallback((domain: any) => {
@@ -233,7 +202,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     const endDate = new Date(x1);
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return; // Ignore invalid dates
+      return; // Ignore invalid dates
     }
 
     // Update immediate brush domain for visual feedback
@@ -242,12 +211,10 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     if (!isBrushActive) {
       setIsBrushActive(true);
     }
-
-    // Filtering update is handled by the useEffect based on brushDomain,
-    // but throttled via canUpdateFilteredDataRef
-
+    
+    // Filtering update is handled by the useEffect based on brushDomain
   }, [isBrushActive]);
-
+  
   // Handle modal brush change with throttling
   const handleModalBrushChange = useCallback((domain: any) => {
     if (!domain) {
@@ -269,7 +236,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     const endDate = new Date(x1);
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return; // Ignore invalid dates
+      return; // Ignore invalid dates
     }
 
     // Update immediate brush domain for visual feedback
@@ -278,11 +245,10 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     if (!isModalBrushActive) {
       setIsModalBrushActive(true);
     }
-
+    
     // Filtering update is handled by the useEffect based on modalBrushDomain
-
   }, [isModalBrushActive]);
-
+  
   // Apply throttled brush domain to filter data
   useEffect(() => {
     if (data.length === 0) {
@@ -306,8 +272,8 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     
     // Throttle the actual filtering logic
     if (!canUpdateFilteredDataRef.current) {
-        // Skip update if throttled
-        return;
+      // Skip update if throttled
+      return;
     }
 
     const [start, end] = brushDomain;
@@ -333,7 +299,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       canUpdateFilteredDataRef.current = true;
     }, 100); // 100ms throttle interval
 
-  }, [brushDomain, data, isBrushActive]);
+  }, [brushDomain, data, isBrushActive, filteredData.length]);
 
   // Apply throttled brush domain to filter modal data
   useEffect(() => {
@@ -358,8 +324,8 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     
     // Throttle the actual filtering logic
     if (!canUpdateModalFilteredDataRef.current) {
-        // Skip update if throttled
-        return;
+      // Skip update if throttled
+      return;
     }
 
     const [start, end] = modalBrushDomain;
@@ -385,11 +351,11 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       canUpdateModalFilteredDataRef.current = true;
     }, 100); // 100ms throttle interval
 
-  }, [modalBrushDomain, modalData, isModalBrushActive]);
-
+  }, [modalBrushDomain, modalData, isModalBrushActive, modalFilteredData.length]);
+  
   // Create tooltip handler
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>, isModal = false) => {
-    console.log('TvlVelocity - Mouse move event', { isModal, clientX: e.clientX, clientY: e.clientY });
+    console.log('TradersActivity - Mouse move event', { isModal, clientX: e.clientX, clientY: e.clientY });
     
     const chartEl = isModal ? modalChartRef.current : chartContainerRef.current;
     if (!chartEl) return;
@@ -398,12 +364,12 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    const margin = { left: 45 };
-    const innerWidth = rect.width - margin.left - 20;
+    const margin = { left: 60 };
+    const innerWidth = rect.width - margin.left - 60;
     
     if (mouseX < margin.left || mouseX > innerWidth + margin.left) {
       if (tooltip.visible) {
-        console.log('TvlVelocity - Mouse outside chart area, hiding tooltip');
+        console.log('TradersActivity - Mouse outside chart area, hiding tooltip');
         setTooltip(prev => ({ ...prev, visible: false }));
       }
       return;
@@ -414,13 +380,18 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       ? (isModalBrushActive ? modalFilteredData : modalData)
       : (isBrushActive ? filteredData : data);
     
-    // Find nearest data point
-    const index = Math.floor((mouseX - margin.left) / (innerWidth / currentData.length));
+    // Sort data by date to ensure chronological order
+    const sortedData = [...currentData].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
     
-    if (index >= 0 && index < currentData.length) {
-      const dataPoint = currentData[index];
+    // Find nearest data point
+    const index = Math.floor((mouseX - margin.left) / (innerWidth / sortedData.length));
+    
+    if (index >= 0 && index < sortedData.length) {
+      const dataPoint = sortedData[index];
       if (!tooltip.visible || tooltip.dataPoint?.date !== dataPoint.date) {
-        console.log('TvlVelocity - Setting tooltip data', { 
+        console.log('TradersActivity - Setting tooltip data', { 
           dataPoint,
           left: mouseX,
           top: mouseY
@@ -439,11 +410,16 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
   // Handle mouse leave
   const handleMouseLeave = useCallback(() => {
     if (tooltip.visible) {
-      console.log('TvlVelocity - Mouse leave, hiding tooltip');
+      console.log('TradersActivity - Mouse leave, hiding tooltip');
       setTooltip(prev => ({ ...prev, visible: false }));
     }
   }, [tooltip.visible]);
-
+  
+  // Fetch data when component mounts
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+  
   // Cleanup throttle timeout on unmount
   useEffect(() => {
     return () => {
@@ -454,34 +430,20 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
         clearTimeout(modalThrottleTimeoutRef.current);
       }
     };
-  }, []); // Empty dependency array runs only on mount/unmount
-
-  // Update modalTimeFilter when timeFilter changes
-  useEffect(() => {
-    // Only update modalTimeFilter from timeFilter when the modal isn't open
-    // This prevents overriding user selections in the modal
-    if (!isModalOpen) {
-      setModalTimeFilter(timeFilter);
-    }
-  }, [timeFilter, isModalOpen]);
-
+  }, []);
+  
   // Initialize modal data when modal opens
   useEffect(() => {
     if (isModalOpen) {
-      // Initialize modal time filter with main time filter only on initial open
-      // not on every render while modal is open
-      setModalTimeFilter(timeFilter);
-      
-      // If we already have data loaded for the main chart with the same filter,
+      // If we already have data loaded for the main chart,
       // we can just use that data for the modal initially
       if (data.length > 0) {
         setModalData(data);
-        setModalFilteredData(data);
+        setModalFilteredData(filteredData);
         setModalLoading(false);
         setModalError(null);
         
         // Set brush as active but don't set a specific domain
-        // This will result in the full range being selected
         setIsModalBrushActive(true);
         setModalBrushDomain(null);
       } else {
@@ -489,29 +451,40 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
         fetchModalData();
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isModalOpen, timeFilter, data]); // Include necessary dependencies but not fetchModalData
+  }, [isModalOpen, data, filteredData, fetchModalData]);
   
-  // Fetch modal data when modalTimeFilter changes and modal is open
-  useEffect(() => {
-    if (isModalOpen) {
-      fetchModalData();
-    }
-  }, [modalTimeFilter, isModalOpen, fetchModalData]);
-
-  // Handle modal time filter change
-  const handleModalTimeFilterChange = useCallback((newFilter: TimeFilter) => {
-    console.log('Time filter changed to:', newFilter);
-    setModalTimeFilter(newFilter);
-  }, []);
-
+  // Helper function to get available metrics for legends
+  const getAvailableMetrics = (chartData: TradersDataPoint[]) => {
+    if (!chartData || chartData.length === 0) return [];
+    
+    return [
+      {
+        key: 'active_signer',
+        displayName: 'Active Traders',
+        shape: 'square',
+        color: tradersActivityChartColors.activeTraders
+      },
+      {
+        key: 'new_signer',
+        displayName: 'New Traders',
+        shape: 'circle',
+        color: tradersActivityChartColors.newTraders
+      },
+      {
+        key: 'new_traders_activation_ratio',
+        displayName: 'Activation Ratio',
+        shape: 'circle',
+        color: tradersActivityChartColors.activationRatio
+      }
+    ];
+  };
+  
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
-    // Use modalTimeFilter and modalData if in modal mode, otherwise use the main timeFilter and data
-    const activeTimeFilter = isModal ? modalTimeFilter : timeFilter;
+    // Use activeData if in modal mode, otherwise use the main data
     const activeData = isModal ? modalData : data;
     const activeFilteredData = isModal ? (isModalBrushActive ? modalFilteredData : modalData) : (isBrushActive ? filteredData : data);
-    const activeLoading = isModal ? modalLoading : loading;
+    const activeLoading = isModal ? modalLoading : isLoading;
     const activeError = isModal ? modalError : error;
     const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
     const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
@@ -530,7 +503,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       return (
         <div className="flex flex-col justify-center items-center h-full">
           <div className="text-gray-400/80 text-xs mb-2">{activeError || 'No data available'}</div>
-          <ButtonSecondary onClick={isModal ? fetchModalData : () => fetchData()}>
+          <ButtonSecondary onClick={isModal ? fetchModalData : fetchData}>
             <div className="flex items-center gap-1.5">
               <RefreshIcon className="w-3.5 h-3.5" />
               <span>Refresh</span>
@@ -540,14 +513,35 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
       );
     }
     
+    // Ensure data is sorted by date
+    const sortedData = [...activeFilteredData].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    
     return (
       <div className="flex flex-col h-full">
         {tooltip.visible && tooltip.dataPoint && (
           <ChartTooltip
-            title={formatDate(tooltip.dataPoint.date, activeTimeFilter)}
+            title={formatTraderDate(tooltip.dataPoint.date)}
             items={[
-              { color: tvlVelocityColors.tvlBar, label: 'TVL', value: formatTvl(tooltip.dataPoint.tvl), shape: 'square' },
-              { color: tvlVelocityColors.velocityLine, label: 'Velocity', value: formatVelocity(tooltip.dataPoint.velocity), shape: 'circle' }
+              { 
+                color: tradersActivityChartColors.activeTraders,
+                label: 'Active Traders',
+                value: formatActiveTraders(tooltip.dataPoint.active_signer),
+                shape: 'square'
+              },
+              {
+                color: tradersActivityChartColors.newTraders,
+                label: 'New Traders',
+                value: formatNewTraders(tooltip.dataPoint.new_signer),
+                shape: 'circle'
+              },
+              {
+                color: tradersActivityChartColors.activationRatio,
+                label: 'Activation Ratio',
+                value: formatRatio(tooltip.dataPoint.new_traders_activation_ratio),
+                shape: 'circle'
+              }
             ]}
             top={tooltip.top}
             left={tooltip.left}
@@ -563,83 +557,112 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
         >
           <ParentSize>
             {({ width, height }) => {
-              if (width <= 0 || height <= 0) return null; 
+              if (width <= 0 || height <= 0) return null;
               
-              const margin = { top: 5, right: 25, bottom: 30, left: 45 };
+              const margin = { top: 20, right: 60, bottom: 40, left: 60 };
               const innerWidth = width - margin.left - margin.right;
               const innerHeight = height - margin.top - margin.bottom;
+              
               if (innerWidth <= 0 || innerHeight <= 0) return null;
-
-              // Use displayed data for this chart (modal or main)
-              const displayData = activeFilteredData;
               
-              // Create a time domain from the current data
-              const dateDomain = displayData.map(d => new Date(d.date));
+              // Find range values for scales
+              const maxActiveSigners = Math.max(...sortedData.map(d => d.active_signer), 0);
+              const maxNewSigners = Math.max(...sortedData.map(d => d.new_signer), 0);
+              const yMax = Math.max(maxActiveSigners, maxNewSigners) * 1.1; // Add 10% padding
               
-              // Use consistent scaleTime for both chart and brush
+              // Create date domain from the current data
+              const dateDomain = sortedData.map(d => new Date(d.date));
+              
+              // Setup scales
               const dateScale = scaleBand<Date>({
                 domain: dateDomain,
-                range: [0, innerWidth],
                 padding: 0.3,
+                range: [0, innerWidth]
               });
-
-              const tvlScale = scaleLinear<number>({
-                domain: [0, Math.max(...displayData.map(d => d.tvl)) * 1.1],
+              
+              const yScale = scaleLinear<number>({
+                domain: [0, yMax],
                 range: [innerHeight, 0],
-                nice: true,
+                nice: true
               });
-
-              const velocityScale = scaleLinear<number>({
-                domain: [0, Math.max(...displayData.map(d => d.velocity)) * 1.1],
+              
+              // Secondary y-scale for activation ratio (0-1)
+              const yRatioScale = scaleLinear<number>({
+                domain: [0, 1.1], // Up to 110% for some padding
                 range: [innerHeight, 0],
-                nice: true,
+                nice: true
               });
               
               return (
-                  <svg width={width} height={height} className="overflow-visible">
-                    <Group left={margin.left} top={margin.top}>
-                    <GridRows scale={tvlScale} width={innerWidth} stroke={tvlVelocityColors.grid} strokeDasharray="2,3" strokeOpacity={0.5} numTicks={5} />
+                <svg width={width} height={height} className="overflow-visible">
+                  <Group left={margin.left} top={margin.top}>
+                    {/* Grid lines */}
+                    <GridRows 
+                      scale={yScale} 
+                      width={innerWidth} 
+                      stroke={tradersActivityChartColors.grid} 
+                      strokeDasharray="2,3" 
+                      strokeOpacity={0.5} 
+                      numTicks={5} 
+                    />
                     
-                    {/* Display active brush status */}
-                    {activeIsBrushActive && (
-                      <text x={0} y={-8} fontSize={8} fill={tvlVelocityColors.velocityLine} textAnchor="start">
-                        {`Filtered: ${displayData.length} item${displayData.length !== 1 ? 's' : ''}`}
-                      </text>
-                    )}
-                    
-                    {displayData.map((d) => {
+                    {/* Active Traders Bars */}
+                    {sortedData.map((d, i) => {
                       const date = new Date(d.date);
                       const barX = dateScale(date);
-                        const barWidth = dateScale.bandwidth();
-                      const barHeight = Math.max(0, innerHeight - tvlScale(d.tvl));
-                        if (barX === undefined || barHeight < 0) return null;
-                        return (
-                        <Bar key={`bar-${d.date}`} x={barX} y={innerHeight - barHeight} width={barWidth} height={barHeight}
-                          fill={tvlVelocityColors.tvlBar} opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7} />
-                        );
-                      })}
+                      const barWidth = dateScale.bandwidth();
+                      const barHeight = innerHeight - yScale(d.active_signer);
+                      if (barX === undefined || barHeight < 0) return null;
+                      
+                      return (
+                        <Bar
+                          key={`bar-${i}`}
+                          x={barX}
+                          y={innerHeight - barHeight}
+                          width={barWidth}
+                          height={barHeight}
+                          fill={tradersActivityChartColors.activeTraders}
+                          opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7}
+                          rx={2}
+                        />
+                      );
+                    })}
                     
-                    <LinePath data={displayData}
+                    {/* New Traders Line */}
+                    <LinePath
+                      data={sortedData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
-                      y={(d) => velocityScale(d.velocity)}
-                      stroke={tvlVelocityColors.velocityLine} strokeWidth={1.5} curve={curveMonotoneX} />
+                      y={(d) => yScale(d.new_signer)}
+                      stroke={tradersActivityChartColors.newTraders}
+                      strokeWidth={1.5}
+                      curve={curveMonotoneX}
+                    />
                     
-                    <AxisBottom top={innerHeight} scale={dateScale}
+                    {/* Activation Ratio Line */}
+                    <LinePath
+                      data={sortedData}
+                      x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
+                      y={(d) => yRatioScale(d.new_traders_activation_ratio)}
+                      stroke={tradersActivityChartColors.activationRatio}
+                      strokeWidth={1.5}
+                      curve={curveMonotoneX}
+                    />
+                    
+                    {/* X-axis (dates) */}
+                    <AxisBottom 
+                      top={innerHeight} 
+                      scale={dateScale}
                       tickFormat={(date) => {
                         const d = date as Date;
-                        // Custom formatting to exclude year
-                        switch(activeTimeFilter) {
-                          case 'Y': return d.getFullYear().toString();
-                          case 'Q': return `Q${Math.floor(d.getMonth() / 3) + 1}`;
-                          case 'M': return d.toLocaleDateString('en-US', { month: 'short' });
-                          case 'D':
-                          default: return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        }
+                        return formatAxisDate(d.toISOString());
                       }}
-                      stroke={tvlVelocityColors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0}
+                      stroke={tradersActivityChartColors.axisLines} 
+                      strokeWidth={0.5} 
+                      tickStroke="transparent" 
+                      tickLength={0}
                       hideZero={true}
                       tickLabelProps={(value, index) => ({ 
-                        fill: tvlVelocityColors.tickLabels, 
+                        fill: tradersActivityChartColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -647,32 +670,49 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
                         dy: '0.5em',
                         dx: index === 0 ? '0.5em' : 0
                       })}
-                      numTicks={activeTimeFilter === 'Y' ? data.length : Math.min(5, data.length)} />
+                      numTicks={isModal ? 6 : 4}
+                    />
                     
-                    <AxisLeft scale={tvlScale} stroke={tvlVelocityColors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0} numTicks={5}
-                      tickFormat={(value) => formatTvl(Number(value))}
+                    {/* Primary Y-axis (Traders Count) */}
+                    <AxisLeft 
+                      scale={yScale}
+                      stroke={tradersActivityChartColors.axisLines} 
+                      strokeWidth={0.5} 
+                      tickStroke="transparent" 
+                      tickLength={0} 
+                      numTicks={5}
+                      tickFormat={(value) => formatLargeNumber(Number(value))}
                       tickLabelProps={() => ({ 
-                        fill: tvlVelocityColors.tickLabels, 
+                        fill: tradersActivityChartColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
                         textAnchor: 'end', 
                         dx: '-0.6em', 
                         dy: '0.25em' 
-                      })} />
+                      })}
+                    />
                     
-                    <AxisRight left={innerWidth} scale={velocityScale} stroke={tvlVelocityColors.axisLines} strokeWidth={0.5}
-                      tickStroke="transparent" tickLength={0} numTicks={5}
-                      tickFormat={(value) => formatVelocity(Number(value))}
-                      tickLabelProps={() => ({ 
-                        fill: tvlVelocityColors.tickLabels, 
-                        fontSize: 11, 
+                    {/* Secondary Y-axis (Activation Ratio) */}
+                    <AxisRight
+                      left={innerWidth}
+                      scale={yRatioScale}
+                      stroke={tradersActivityChartColors.axisLines}
+                      strokeWidth={0.5}
+                      tickStroke="transparent"
+                      tickLength={0}
+                      numTicks={5}
+                      tickFormat={(value) => `${(Number(value) * 100).toFixed(0)}%`}
+                      tickLabelProps={() => ({
+                        fill: tradersActivityChartColors.tickLabels,
+                        fontSize: 11,
                         fontWeight: 300,
                         letterSpacing: '0.05em',
-                        textAnchor: 'start', 
-                        dx: '0.5em', 
-                        dy: '0.25em' 
-                      })} />
+                        textAnchor: 'start',
+                        dx: '0.5em',
+                        dy: '0.25em'
+                      })}
+                    />
                   </Group>
                 </svg>
               );
@@ -680,39 +720,28 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
           </ParentSize>
         </div>
         
-        {/* Brush component - now shown for both main chart and modal */}
+        {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
-          <BrushTimeScale 
+          <BrushTimeScale
             data={isModal ? modalData : data}
             isModal={isModal}
-            activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
-            onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
-            onClearBrush={isModal 
-              ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
-              : () => { setBrushDomain(null); setIsBrushActive(false); }
-            }
+            activeBrushDomain={activeBrushDomain}
+            onBrushChange={activeHandleBrushChange}
+            onClearBrush={activeClearBrush}
             getDate={(d) => d.date}
-            getValue={(d) => d.tvl}
-            lineColor={tvlVelocityColors.tvlBar}
-            margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
+            getValue={(d) => d.active_signer}
+            lineColor={tradersActivityChartColors.activeTraders}
+            margin={{ top: 5, right: 60, bottom: 10, left: 60 }}
           />
         </div>
       </div>
     );
   };
-
-  return (
-    <div className="h-full w-full relative">
-      {renderChartContent(0, 0)}
-      
-      {/* Modal */}
-      <Modal isOpen={isModalOpen} onClose={onModalClose} title="TVL and Velocity Trends" subtitle="Tracking value locked and market velocity across the ecosystem">
-        
-        {/* Time filter */}
-        <div className="flex items-center justify-start pl-1 py-0 mb-3">
-          <TimeFilterSelector value={modalTimeFilter} onChange={handleModalTimeFilterChange} />
-        </div>
-        
+  
+  // Render the modal content
+  const renderModalContent = () => {
+    return (
+      <div className="p-4 w-full h-full">
         {/* Horizontal line */}
         <div className="h-px bg-gray-900 w-full mb-3"></div>
         
@@ -729,10 +758,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
               <div className="flex flex-col gap-4 pt-4">
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    {getAvailableChartMetrics(modalData, { 
-                      tvl: tvlVelocityColors.tvlBar, 
-                      velocity: tvlVelocityColors.velocityLine 
-                    }).map(metric => (
+                    {getAvailableMetrics(modalData).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 
                           className={`w-2.5 h-2.5 mr-2 ${metric.shape === 'circle' ? 'rounded-full' : 'rounded-sm'} mt-0.5`}
@@ -751,7 +777,12 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
                     </div>
                     
                     <div className="flex items-start">
-                      <div className="w-2.5 h-2.5 bg-purple-500 mr-2 rounded-full mt-0.5 animate-pulse"></div>
+                      <div className="w-2.5 h-2.5 bg-orange-500 mr-2 rounded-full mt-0.5 animate-pulse"></div>
+                      <span className="text-[11px] text-gray-300">Loading...</span>
+                    </div>
+                    
+                    <div className="flex items-start">
+                      <div className="w-2.5 h-2.5 bg-green-500 mr-2 rounded-full mt-0.5 animate-pulse"></div>
                       <span className="text-[11px] text-gray-300">Loading...</span>
                     </div>
                   </div>
@@ -760,9 +791,18 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
             </div>
           </div>
         </div>
+      </div>
+    );
+  };
+  
+  return (
+    <div className="h-full w-full relative">
+      {renderChartContent(0, 0)}
+      
+      {/* Modal for expanded view */}
+      <Modal isOpen={isModalOpen} onClose={onModalClose} title="Traders Activity" subtitle="Analysis of active and new trader metrics on Solana DEXes">
+        {renderModalContent()}
       </Modal>
     </div>
   );
-};
-
-export default TvlVelocityChart; 
+} 

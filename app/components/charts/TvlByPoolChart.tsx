@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ParentSize } from '@visx/responsive';
 import { Pie } from '@visx/shape';
 import { Group } from '@visx/group';
@@ -73,6 +73,10 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
   const [modalData, setModalData] = useState<TvlByPoolDataPoint[]>([]);
   const [modalLoading, setModalLoading] = useState<boolean>(true);
   
+  // Add refs for chart containers
+  const chartRef = useRef<HTMLDivElement>(null);
+  const modalChartRef = useRef<HTMLDivElement>(null);
+  
   // State for tooltip
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
@@ -138,14 +142,26 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
   };
 
   // Handle tooltip
-  const handleTooltip = (isVisible: boolean, dataPoint: TvlByPoolDataPoint | null, event: React.MouseEvent) => {
+  const handleTooltip = (isVisible: boolean, dataPoint: TvlByPoolDataPoint | null, event: React.MouseEvent, isModal: boolean = false) => {
     if (isVisible && dataPoint) {
-      setTooltip({
-        visible: true,
-        data: dataPoint,
-        x: event.clientX,
-        y: event.clientY
-      });
+      // Get the chart element reference
+      const chartEl = isModal ? modalChartRef.current : chartRef.current;
+      
+      if (chartEl) {
+        // Get the bounding rectangle of the chart container
+        const rect = chartEl.getBoundingClientRect();
+        
+        // Calculate x and y coordinates relative to the chart container
+        const xInChart = event.clientX - rect.left;
+        const yInChart = event.clientY - rect.top;
+        
+        setTooltip({
+          visible: true,
+          data: dataPoint,
+          x: xInChart,
+          y: yInChart
+        });
+      }
     } else {
       setTooltip(prev => ({ ...prev, visible: false }));
     }
@@ -189,7 +205,7 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
     const colorScale = getColorScale(chartData);
     
     return (
-      <div className="h-full w-full">
+      <div className="h-full w-full relative" ref={isModal ? modalChartRef : chartRef}>
         {tooltip.visible && tooltip.data && (
           <ChartTooltip
             title={tooltip.data.pool}
@@ -207,8 +223,9 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
                 shape: 'square' 
               }
             ]}
-            top={tooltip.y - 100}
-            left={tooltip.x + 10}
+            top={tooltip.y}
+            left={tooltip.x}
+            isModal={isModal}
           />
         )}
         
@@ -240,8 +257,8 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
                         return (
                           <g 
                             key={`arc-${arcData.pool}-${index}`}
-                            onMouseMove={(e) => handleTooltip(true, arcData, e)}
-                            onMouseLeave={() => handleTooltip(false, null, null as any)}
+                            onMouseMove={(e) => handleTooltip(true, arcData, e, isModal)}
+                            onMouseLeave={() => handleTooltip(false, null, null as any, isModal)}
                           >
                             <path
                               d={pie.path(arc) || ''}
@@ -341,7 +358,7 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
   };
 
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative" ref={chartRef}>
       {renderChartContent(false)}
       
       {/* Modal */}
@@ -355,7 +372,7 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
           {/* Chart with legends in modal */}
           <div className="flex h-full">
             {/* Chart area - left side */}
-            <div className="w-[80%] h-full pr-3 border-r border-gray-900">
+            <div className="w-[80%] h-full pr-3 border-r border-gray-900 relative">
               {renderChartContent(true)}
             </div>
             
