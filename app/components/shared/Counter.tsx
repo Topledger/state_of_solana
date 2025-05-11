@@ -49,12 +49,15 @@ const variantStyles: Record<CounterVariant, { bg: string, text: string, shadow: 
   }
 };
 
-// Helper function to parse numeric values from formatted strings like "$1.95T" or "$950B"
+// Helper function to parse numeric values from formatted strings like "$1.95T" or "$950B" or "1,364"
 const parseNumericValue = (value: string): number => {
   if (!value) return 0;
   
+  // Remove any commas first
+  const cleanValue = value.replace(/,/g, '');
+  
   // Extract numeric part and multiplier (B, M, T)
-  const match = value.match(/\$?([\d.]+)([BMT])?/);
+  const match = cleanValue.match(/\$?([\d.]+)([BMT])?/);
   if (!match) return 0;
   
   const number = parseFloat(match[1]);
@@ -71,8 +74,12 @@ const parseNumericValue = (value: string): number => {
 
 // Format numbers based on their value range
 const formatAnimatedValue = (value: number, targetValue: string): string => {
+  // If target has commas and no currency symbol, format as integer with commas
+  if (targetValue.includes(',') && !targetValue.includes('$')) {
+    return Math.round(value).toLocaleString('en-US');
+  }
   // If target ends with T, format as trillion
-  if (targetValue.includes('T')) {
+  else if (targetValue.includes('T')) {
     return `$${(value / 1000000).toFixed(2)}T`;
   }
   // If target ends with B, format as billion
@@ -86,6 +93,10 @@ const formatAnimatedValue = (value: number, targetValue: string): string => {
   // For percentages
   else if (targetValue.includes('%')) {
     return `${value.toFixed(1)}%`;
+  }
+  // For plain integers (no commas in original)
+  else if (!isNaN(Number(targetValue))) {
+    return Math.round(value).toString();
   }
   // Default format
   return value.toString();

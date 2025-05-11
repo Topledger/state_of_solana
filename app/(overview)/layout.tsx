@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 import Layout from "../components/Layout";
-import OverviewTabsHeader from "./components/OverviewTabsHeader";
+import OverviewTabsHeader from "@/app/(overview)/components/OverviewTabsHeader";
 import { usePathname } from "next/navigation";
 
 interface OverviewLayoutProps {
@@ -13,8 +13,8 @@ export default function OverviewLayout({ children }: OverviewLayoutProps) {
   const pathname = usePathname();
   
   // Extract the active tab from pathname
-  // / -> main, /analytics -> analytics, etc.
-  let activeTab = "main";
+  // /dashboard -> dashboard, /analytics -> analytics, etc.
+  let activeTab = "dashboard";
   
   if (pathname !== "/") {
     // Remove leading slash and get the first segment

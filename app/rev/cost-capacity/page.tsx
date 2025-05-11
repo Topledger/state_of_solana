@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import CostCapacityChart, { costCapacityColors } from "../../components/charts/CostCapacityChart";
-import TransactionMetricsChart, { transactionMetricsColors } from "../../components/charts/TransactionMetricsChart";
+import CostCapacityChart, { costCapacityColors } from "../../components/charts/REV/cost-capacity/CostCapacityChart";
+import TransactionMetricsChart, { transactionMetricsColors } from "../../components/charts/REV/cost-capacity/TransactionMetricsChart";
 import { TimeFilter, CurrencyType, fetchCostCapacityData, formatDate, CostCapacityDataPoint } from "../../api/REV/cost-capacity";
-import { ExpandIcon, DownloadIcon } from "../../components/shared/Icons";
 import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
 import CurrencyFilter from "../../components/shared/filters/CurrencyFilter";
 import DisplayModeFilter, { DisplayMode } from "../../components/shared/filters/DisplayModeFilter";
+import ChartCard from "../../components/shared/ChartCard";
+import LegendItem from "../../components/shared/LegendItem";
 
 // Define fee types - MUST match stackKeys used in chart and data
 const feeTypes = ['base_fee', 'priority_fee', 'jito_total_tips', 'vote_fees'];
@@ -297,42 +298,14 @@ export default function CostCapacityPage() {
     
     <div className="space-y-6">
       {/* Transaction Fees Chart */}
-      <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-blue-900/20 transition-all duration-300">
-        <div className="flex justify-between items-center mb-3">
-          <div className="-mt-1">
-            <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Transaction Fees</h2>
-            <p className="text-gray-500 text-[10px] tracking-wide">Tracking different fee components in Solana ecosystem</p>
-          </div>
-          {/* Action buttons */}
-          <div className="flex space-x-2">
-            {/* Download button */}
-            <button 
-              className={`p-1.5 ${isDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'} rounded-md transition-colors`}
-              onClick={downloadCostCapacityCSV}
-              disabled={isDownloading}
-              title="Download Data"
-            >
-              {isDownloading ? (
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <DownloadIcon className="w-4 h-4" />
-              )}
-            </button>
-            
-            {/* Expand button */}
-            <button 
-              className="p-1.5 bg-blue-500/10 rounded-md text-blue-400 hover:bg-blue-500/20 transition-colors"
-              onClick={() => setChartModalOpen(true)}
-              title="Expand Chart"
-            >
-              <ExpandIcon className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        {/* First Divider */}
-        <div className="h-px bg-gray-900 w-full"></div>
-        {/* Filters */}
-        <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
+      <ChartCard
+        title="Transaction Fees"
+        description="Tracking different fee components in Solana ecosystem"
+        accentColor="blue"
+        onExpandClick={() => setChartModalOpen(true)}
+        onDownloadClick={downloadCostCapacityCSV}
+        isDownloading={isDownloading}
+        filterBar={
           <div className="flex flex-wrap gap-3 items-center">
             {/* Time filter */}
             <TimeFilterSelector 
@@ -350,7 +323,7 @@ export default function CostCapacityPage() {
             {/* Currency filter */}
             <CurrencyFilter 
               currency={feeCurrencyFilter} 
-              onChange={(val) => setFeeCurrencyFilter(val)}
+              onChange={(val) => setFeeCurrencyFilter(val as CurrencyType)}
               isCompact={true}
             />
             
@@ -361,183 +334,89 @@ export default function CostCapacityPage() {
               isCompact={true}
             />
           </div>
-        </div>
-        
-        {/* Divider */}
-        <div className="h-px bg-gray-900 w-full mb-3"></div>
-
-        <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-        
-        {/* Chart container */}
-        <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-80 lg:h-auto">
-          <CostCapacityChart
-            timeFilter={feeTimeFilter}
-            currencyFilter={feeCurrencyFilter}
-            displayMode={feeDisplayMode}
-            isModalOpen={chartModalOpen}
-            onModalClose={() => setChartModalOpen(false)}
-            onTimeFilterChange={setFeeTimeFilter}
-            onCurrencyChange={setFeeCurrencyFilter}
-            onDisplayModeChange={setFeeDisplayMode}
-          />
-        </div>
-        
-        {/* Legend */}
-        <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
-          <div className="flex flex-row lg:flex-col gap-4 lg:gap-3 pt-1 pb-2 lg:pb-0">
-            <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
-              {feeTypes.map((key: string) => (
-                <div key={key} className="flex items-start">
-                  <div 
-                    className="w-2 h-2 rounded-sm mr-2 mt-0.5" 
-                    style={{ backgroundColor: costCapacityColors[key as keyof typeof costCapacityColors] || '#ccc' }}
-                  ></div>
-                  <span className="text-xs text-gray-300">{getFeeTypeDisplayName(key)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        </div>
-      </div>
+        }
+        legend={
+          feeTypes.map((key: string) => (
+            <LegendItem 
+              key={key}
+              label={getFeeTypeDisplayName(key)}
+              color={costCapacityColors[key as keyof typeof costCapacityColors] || '#ccc'}
+              shape="square"
+            />
+          ))
+        }
+      >
+        <CostCapacityChart
+          timeFilter={feeTimeFilter}
+          currencyFilter={feeCurrencyFilter}
+          displayMode={feeDisplayMode}
+          isModalOpen={chartModalOpen}
+          onModalClose={() => setChartModalOpen(false)}
+          onTimeFilterChange={setFeeTimeFilter}
+          onCurrencyChange={setFeeCurrencyFilter}
+          onDisplayModeChange={setFeeDisplayMode}
+        />
+      </ChartCard>
 
       {/* Transaction Success & Volume Chart */}
-      <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-blue-900/20 transition-all duration-300">
-        <div className="flex justify-between items-center mb-3">
-          <div className="-mt-1">
-            <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Transaction Success & Volume</h2>
-            <p className="text-gray-500 text-[10px] tracking-wide">Success rates and transaction volumes</p>
-          </div>
-          {/* Action buttons */}
-          <div className="flex space-x-2">
-            {/* Download button */}
-            <button 
-              className={`p-1.5 ${isSuccessVolumeDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'} rounded-md transition-colors`}
-              onClick={downloadSuccessVolumeCSV}
-              disabled={isSuccessVolumeDownloading}
-              title="Download Data"
-            >
-              {isSuccessVolumeDownloading ? (
-                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <DownloadIcon className="w-4 h-4" />
-              )}
-            </button>
-            
-            {/* Expand button */}
-            <button 
-              className="p-1.5 bg-blue-500/10 rounded-md text-blue-400 hover:bg-blue-500/20 transition-colors"
-              onClick={() => setSuccessVolumeChartModalOpen(true)}
-              title="Expand Chart"
-            >
-              <ExpandIcon className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        {/* Divider */}
-        <div className="h-px bg-gray-900 w-full mb-3"></div>
-
-        <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-          {/* Chart container */}
-          <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-80 lg:h-auto">
-            <TransactionMetricsChart
-              timeFilter={successVolumeTimeFilter}
-              displayMode={successVolumeDisplayMode}
-              isModalOpen={successVolumeChartModalOpen}
-              onModalClose={() => setSuccessVolumeChartModalOpen(false)}
-              onTimeFilterChange={setSuccessVolumeTimeFilter}
-              onDisplayModeChange={setSuccessVolumeDisplayMode}
-              chartType="success-volume"
+      <ChartCard
+        title="Transaction Success & Volume"
+        description="Success rates and transaction volumes"
+        accentColor="blue"
+        onExpandClick={() => setSuccessVolumeChartModalOpen(true)}
+        onDownloadClick={downloadSuccessVolumeCSV}
+        isDownloading={isSuccessVolumeDownloading}
+        legend={
+          transactionSuccessVolumeTypes.map((type) => (
+            <LegendItem 
+              key={type.key}
+              label={type.label}
+              color={type.color}
+              shape={type.shape === 'circle' ? 'circle' : 'square'}
             />
-          </div>
-
-          {/* Legend */}
-          <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible">
-            <div className="flex flex-row lg:flex-col gap-4 lg:gap-3 pt-1 pb-2 lg:pb-0">
-              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
-                {transactionSuccessVolumeTypes.map((type) => (
-                  <div key={type.key} className="flex items-start">
-                    <div 
-                      className={`w-2 h-2 mr-2 mt-0.5 ${type.shape === 'circle' ? 'rounded-full' : 'rounded-sm'}`} 
-                      style={{ backgroundColor: type.color }}
-                    ></div>
-                    <span className="text-xs text-gray-300">{type.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          ))
+        }
+      >
+        <TransactionMetricsChart
+          timeFilter={successVolumeTimeFilter}
+          displayMode={successVolumeDisplayMode}
+          isModalOpen={successVolumeChartModalOpen}
+          onModalClose={() => setSuccessVolumeChartModalOpen(false)}
+          onTimeFilterChange={setSuccessVolumeTimeFilter}
+          onDisplayModeChange={setSuccessVolumeDisplayMode}
+          chartType="success-volume"
+        />
+      </ChartCard>
 
       {/* TPS Metrics Chart */}
-      <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-purple-900/20 transition-all duration-300">
-        <div className="flex justify-between items-center mb-3">
-          <div className="-mt-1">
-            <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">TPS Metrics</h2>
-            <p className="text-gray-500 text-[10px] tracking-wide">Transactions per second over time</p>
-          </div>
-          {/* Action buttons */}
-          <div className="flex space-x-2">
-            {/* Download button */}
-            <button 
-              className={`p-1.5 ${isTpsDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'} rounded-md transition-colors`}
-              onClick={downloadTpsMetricsCSV}
-              disabled={isTpsDownloading}
-              title="Download Data"
-            >
-              {isTpsDownloading ? (
-                <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <DownloadIcon className="w-4 h-4" />
-              )}
-            </button>
-            
-            {/* Expand button */}
-            <button 
-              className="p-1.5 bg-purple-500/10 rounded-md text-purple-400 hover:bg-purple-500/20 transition-colors"
-              onClick={() => setTpsChartModalOpen(true)}
-              title="Expand Chart"
-            >
-              <ExpandIcon className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-        {/* Divider */}
-        <div className="h-px bg-gray-900 w-full mb-3"></div>
-
-        <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-          {/* Chart container */}
-          <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-80 lg:h-auto">
-            <TransactionMetricsChart
-              timeFilter={tpsTimeFilter}
-              displayMode={tpsDisplayMode}
-              isModalOpen={tpsChartModalOpen}
-              onModalClose={() => setTpsChartModalOpen(false)}
-              onTimeFilterChange={setTpsTimeFilter}
-              onDisplayModeChange={setTpsDisplayMode}
-              chartType="tps"
+      <ChartCard
+        title="TPS Metrics"
+        description="Transactions per second over time"
+        accentColor="purple"
+        onExpandClick={() => setTpsChartModalOpen(true)}
+        onDownloadClick={downloadTpsMetricsCSV}
+        isDownloading={isTpsDownloading}
+        legend={
+          tpsMetricsTypes.map((type) => (
+            <LegendItem 
+              key={type.key}
+              label={type.label}
+              color={type.color}
+              shape={type.shape === 'circle' ? 'circle' : 'square'}
             />
-          </div>
-
-          {/* Legend */}
-          <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible">
-            <div className="flex flex-row lg:flex-col gap-4 lg:gap-3 pt-1 pb-2 lg:pb-0">
-              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
-                {tpsMetricsTypes.map((type) => (
-                  <div key={type.key} className="flex items-start">
-                    <div 
-                      className={`w-2 h-2 mr-2 mt-0.5 ${type.shape === 'circle' ? 'rounded-full' : 'rounded-sm'}`} 
-                      style={{ backgroundColor: type.color }}
-                    ></div>
-                    <span className="text-xs text-gray-300">{type.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          ))
+        }
+      >
+        <TransactionMetricsChart
+          timeFilter={tpsTimeFilter}
+          displayMode={tpsDisplayMode}
+          isModalOpen={tpsChartModalOpen}
+          onModalClose={() => setTpsChartModalOpen(false)}
+          onTimeFilterChange={setTpsTimeFilter}
+          onDisplayModeChange={setTpsDisplayMode}
+          chartType="tps"
+        />
+      </ChartCard>
     </div>
   );
 } 

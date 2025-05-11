@@ -12,8 +12,8 @@ export interface BrushTimeScaleProps {
   activeBrushDomain: [Date, Date] | null;
   onBrushChange: (domain: any) => void;
   onClearBrush: () => void;
-  // Function that extracts date from data point
-  getDate: (d: any) => string;
+  // Function that extracts date from data point, can return string or Date
+  getDate: (d: any) => string | Date;
   // Function that extracts value for the line from data point
   getValue: (d: any) => number;
   // Function for organizing data by unique dates
@@ -65,7 +65,10 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
           // Handle unique dates if provided
           const uniqueDates = getUniqueDates 
             ? getUniqueDates(data)
-            : [...new Set(data.map(d => getDate(d)))];
+            : [...new Set(data.map(d => {
+                const dateValue = getDate(d);
+                return typeof dateValue === 'string' ? dateValue : dateValue.toISOString();
+              }))];
           
           // Convert dates to Date objects for the time scale
           const dateDomain = uniqueDates.map(d => new Date(d));
@@ -115,7 +118,12 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
           const lineData = getUniqueDates 
             ? uniqueDates.map((date, idx) => {
                 // Find data point for this date - assumes first match is representative
-                const dataPoint = data.find(d => getDate(d) === date);
+                const dataPoint = data.find(d => {
+                  const dateValue = getDate(d);
+                  return typeof dateValue === 'string' 
+                    ? dateValue === date 
+                    : dateValue.toISOString() === date;
+                });
                 return {
                   date,
                   idx,
@@ -124,7 +132,7 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
               })
             // Otherwise use data directly with indices
             : data.map((d, idx) => ({
-                date: getDate(d),
+                date: typeof getDate(d) === 'string' ? getDate(d) as string : (getDate(d) as Date).toISOString(),
                 idx,
                 value: getValue(d)
               }));

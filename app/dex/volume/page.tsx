@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import VolumeHistoryChart from "../../components/charts/VolumeHistoryChart";
-import VolumeByProgramChart from "../../components/charts/VolumeByProgramChart";
-import MemecoinVolumeChart from "../../components/charts/MemecoinVolumeChart";
-import { ExpandIcon, DownloadIcon } from "../../components/shared/Icons";
+import VolumeHistoryChart from "../../components/charts/DEX/volume/VolumeHistoryChart";
+import VolumeByProgramChart from "../../components/charts/DEX/volume/VolumeByProgramChart";
+import MemecoinVolumeChart from "../../components/charts/DEX/volume/MemecoinVolumeChart";
 import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
 import { VolumeTimeFilter, fetchVolumeHistoryData, formatVolumeDate } from "../../api/dex/volume/volumeHistoryData";
 import { VolumeByProgramDataPoint, fetchVolumeByProgramDataWithFallback, formatVolume } from "../../api/dex/volume/volumeByProgramData";
 import { MemecoinVolumeTimeFilter, fetchMemecoinVolumeDataWithFallback } from "../../api/dex/volume/memecoinVolumeData";
+import ChartCard from "../../components/shared/ChartCard";
+import LegendItem from "../../components/shared/LegendItem";
 
 // Define color palette (same as in VolumeByProgramChart)
 const colors = [
@@ -240,44 +241,14 @@ export default function DexVolumePage() {
       {/* First row: Volume History and Volume by Program charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Trading Volume History Chart */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-blue-900/20 transition-all duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Trading Volume History</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Tracking trading volume trends across the Solana ecosystem</p>
-            </div>
-            {/* Action buttons */}
-            <div className="flex space-x-2">
-              {/* Download button */}
-              <button 
-                className={`p-1.5 ${isDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'} rounded-md transition-colors`}
-                onClick={downloadVolumeDataCSV}
-                disabled={isDownloading}
-                title="Download CSV Data"
-              >
-                {isDownloading ? (
-                  <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <DownloadIcon className="w-4 h-4" />
-                )}
-              </button>
-              
-              {/* Expand button */}
-              <button 
-                className="p-1.5 bg-blue-500/10 rounded-md text-blue-400 hover:bg-blue-500/20 transition-colors"
-                onClick={() => setChartModalOpen(true)}
-                title="Expand Chart"
-              >
-                <ExpandIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          
-          {/* Divider */}
-          <div className="h-px bg-gray-900 w-full"></div>
-          
-          {/* Filter Space */}
-          <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
+        <ChartCard
+          title="Trading Volume History"
+          description="Tracking trading volume trends across the Solana ecosystem"
+          accentColor="blue"
+          onExpandClick={() => setChartModalOpen(true)}
+          onDownloadClick={downloadVolumeDataCSV}
+          isDownloading={isDownloading}
+          filterBar={
             <TimeFilterSelector 
               value={timeFilter} 
               onChange={(val) => setTimeFilter(val as VolumeTimeFilter)}
@@ -287,139 +258,54 @@ export default function DexVolumePage() {
                 { value: 'Q', label: 'Q' }
               ]}
             />
-          </div>
-          
-          {/* Second Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - Render the chart */}
-          <div className="h-[360px] lg:h-80">
-            <VolumeHistoryChart 
-              timeFilter={timeFilter}
-              isModalOpen={chartModalOpen}
-              onModalClose={() => setChartModalOpen(false)}
-            />
-          </div>
-        </div>
+          }
+        >
+          <VolumeHistoryChart 
+            timeFilter={timeFilter}
+            isModalOpen={chartModalOpen}
+            onModalClose={() => setChartModalOpen(false)}
+          />
+        </ChartCard>
         
         {/* Volume by Program Chart */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-purple-900/20 transition-all duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Volume by Program</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Breakdown of trading volume by decentralized exchange</p>
-            </div>
-            <div className="flex space-x-2">
-              {/* Download button */}
-              <button 
-                className={`p-1.5 ${isProgramDataDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'} rounded-md transition-colors`}
-                onClick={downloadVolumeByProgramDataCSV}
-                disabled={isProgramDataDownloading}
-                title="Download CSV Data"
-              >
-                {isProgramDataDownloading ? (
-                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <DownloadIcon className="w-4 h-4" />
-                )}
-              </button>
-              
-              {/* Expand button */}
-              <button 
-                className="p-1.5 bg-purple-500/10 rounded-md text-purple-400 hover:bg-purple-500/20 transition-colors"
-                onClick={() => setProgramChartModalOpen(true)}
-                title="Expand Chart"
-              >
-                <ExpandIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          
-          {/* First Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - Split into columns on desktop, stacked on mobile */}
-          <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-            {/* Chart Area */}
-            <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-64 lg:h-auto">
-              <VolumeByProgramChart
-                isModalOpen={programChartModalOpen}
-                onModalClose={() => setProgramChartModalOpen(false)}
-              />
-            </div>
-            
-            {/* Legend Area - horizontal on mobile, vertical on desktop with scrolling */}
-            <div className="w-full lg:w-1/4 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
-              <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 pt-1 pb-0 h-full w-full overflow-hidden">
-                <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 w-full h-full overflow-y-auto
-                  [&::-webkit-scrollbar]:w-1.5 
-                  [&::-webkit-scrollbar-track]:bg-transparent 
-                  [&::-webkit-scrollbar-thumb]:bg-gray-700/40
-                  [&::-webkit-scrollbar-thumb]:rounded-full
-                  [&::-webkit-scrollbar-thumb]:hover:bg-gray-600/60
-                  scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-700/40">
-                  {isVolumeByProgramLoading ? (
-                    // Loading state
-                    <div className="flex items-start">
-                      <div className="w-2 h-2 bg-purple-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                      <span className="text-xs text-gray-300">Loading...</span>
-                    </div>
-                  ) : (
-                    // Dynamically generated legends based on actual data
-                    volumeByProgramData.map((item, index) => (
-                      <div key={`legend-${index}`} className="flex items-start">
-                        <div 
-                          className="w-2 h-2 mr-2 rounded-sm mt-0.5 flex-shrink-0" 
-                          style={{ background: colors[index % colors.length] }}
-                        ></div>
-                        <span className="text-xs text-gray-300 break-words max-w-full">
-                          {item.dex} <span className="text-gray-400">({item.percentage.toFixed(1)}%)</span>
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ChartCard
+          title="Volume by Program"
+          description="Breakdown of trading volume by decentralized exchange"
+          accentColor="purple"
+          onExpandClick={() => setProgramChartModalOpen(true)}
+          onDownloadClick={downloadVolumeByProgramDataCSV}
+          isDownloading={isProgramDataDownloading}
+          legendWidth="1/4"
+          legend={
+            isVolumeByProgramLoading ? (
+              <LegendItem label="Loading..." color="#a78bfa" isLoading={true} />
+            ) : (
+              volumeByProgramData.map((item, index) => (
+                <LegendItem
+                  key={`legend-${index}`}
+                  label={`${item.dex} (${item.percentage.toFixed(1)}%)`}
+                  color={colors[index % colors.length]}
+                  tooltipText={`${item.dex}: ${formatVolume(item.volume)} (${item.percentage.toFixed(1)}%)`}
+                />
+              ))
+            )
+          }
+        >
+          <VolumeByProgramChart
+            isModalOpen={programChartModalOpen}
+            onModalClose={() => setProgramChartModalOpen(false)}
+          />
+        </ChartCard>
       </div>
       
-      {/* Second row: Volume by Token and New Chart Container */}
+      {/* Second row: Volume by Token and Memecoin Volume charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Volume by Token Chart Container */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-green-900/20 transition-all duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Volume by Token</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Most traded tokens by volume over time</p>
-            </div>
-            <div className="flex space-x-2">
-              {/* Download button */}
-              <button 
-                className="p-1.5 bg-green-500/10 rounded-md text-green-400 hover:bg-green-500/20 transition-colors"
-                onClick={() => {/* Placeholder for download function */}}
-                title="Download CSV Data"
-              >
-                <DownloadIcon className="w-4 h-4" />
-              </button>
-              
-              {/* Expand button */}
-              <button 
-                className="p-1.5 bg-green-500/10 rounded-md text-green-400 hover:bg-green-500/20 transition-colors"
-                onClick={() => {/* Placeholder for expand function */}}
-                title="Expand Chart"
-              >
-                <ExpandIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          
-          {/* Divider */}
-          <div className="h-px bg-gray-900 w-full"></div>
-          
-          {/* Filter Space */}
-          <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
+        {/* Volume by Token Chart */}
+        <ChartCard
+          title="Volume by Token"
+          description="Most traded tokens by volume over time"
+          accentColor="green"
+          filterBar={
             <TimeFilterSelector 
               value={tokenVolumeTimeFilter} 
               onChange={(val) => setTokenVolumeTimeFilter(val as VolumeTimeFilter)}
@@ -429,55 +315,22 @@ export default function DexVolumePage() {
                 { value: 'Q', label: 'Q' }
               ]}
             />
-          </div>
-          
-          {/* Second Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - Placeholder for chart */}
-          <div className="h-[360px] lg:h-80 flex items-center justify-center">
+          }
+        >
+          <div className="h-full flex items-center justify-center">
             <div className="text-gray-500 text-sm">Token Volume Chart (Coming Soon)</div>
           </div>
-        </div>
+        </ChartCard>
         
         {/* Top Memecoins by Volume */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-amber-900/20 transition-all duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Top Memecoins by Volume</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Analysis of trading volume across memecoins</p>
-            </div>
-            <div className="flex space-x-2">
-              {/* Download button */}
-              <button 
-                className={`p-1.5 ${isMemecoinDataDownloading ? 'opacity-50 cursor-not-allowed' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'} rounded-md transition-colors`}
-                onClick={downloadMemecoinVolumeDataCSV}
-                disabled={isMemecoinDataDownloading}
-                title="Download CSV Data"
-              >
-                {isMemecoinDataDownloading ? (
-                  <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <DownloadIcon className="w-4 h-4" />
-                )}
-              </button>
-              
-              {/* Expand button */}
-              <button 
-                className="p-1.5 bg-amber-500/10 rounded-md text-amber-400 hover:bg-amber-500/20 transition-colors"
-                onClick={() => setMemecoinModalOpen(true)}
-                title="Expand Chart"
-              >
-                <ExpandIcon className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          
-          {/* Divider */}
-          <div className="h-px bg-gray-900 w-full"></div>
-          
-          {/* Filter Space */}
-          <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
+        <ChartCard
+          title="Top Memecoins by Volume"
+          description="Analysis of trading volume across memecoins"
+          accentColor="orange"
+          onExpandClick={() => setMemecoinModalOpen(true)}
+          onDownloadClick={downloadMemecoinVolumeDataCSV}
+          isDownloading={isMemecoinDataDownloading}
+          filterBar={
             <TimeFilterSelector 
               value={memecoinVolumeTimeFilter} 
               onChange={(val) => setMemecoinVolumeTimeFilter(val as MemecoinVolumeTimeFilter)}
@@ -487,73 +340,36 @@ export default function DexVolumePage() {
                 { value: 'M', label: 'M' },   
               ]}
             />
-          </div>
-          
-          {/* Second Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - With Chart and Legend */}
-          <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-            {/* Chart Area */}
-            <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-64 lg:h-auto">
-              <MemecoinVolumeChart 
-                timeFilter={memecoinVolumeTimeFilter}
-                isModalOpen={memecoinModalOpen}
-                onModalClose={() => setMemecoinModalOpen(false)}
-                onDataUpdate={(data) => {
-                  setMemecoinVolumeData(data);
-                  setIsMemecoinVolumeLoading(false);
-                }}
-              />
-            </div>
-            
-            {/* Legend Area - horizontal on mobile, vertical on desktop with scrolling */}
-            <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
-              <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 pt-1 pb-0 h-full w-full overflow-hidden">
-                <div className="flex flex-row lg:flex-col gap-2 lg:gap-2 w-full h-full overflow-y-auto
-                  [&::-webkit-scrollbar]:w-1.5 
-                  [&::-webkit-scrollbar-track]:bg-transparent 
-                  [&::-webkit-scrollbar-thumb]:bg-gray-700/40
-                  [&::-webkit-scrollbar-thumb]:rounded-full
-                  [&::-webkit-scrollbar-thumb]:hover:bg-gray-600/60
-                  scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-700/40">
-                  {isMemecoinVolumeLoading ? (
-                    // Loading state
-                    <>
-                      <div className="flex items-start">
-                        <div className="w-2 h-2 bg-amber-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <span className="text-xs text-gray-300">Loading...</span>
-                      </div>
-                      <div className="flex items-start">
-                        <div className="w-2 h-2 bg-amber-400 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <span className="text-xs text-gray-300">Loading...</span>
-                      </div>
-                      <div className="flex items-start">
-                        <div className="w-2 h-2 bg-amber-300 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <span className="text-xs text-gray-300">Loading...</span>
-                      </div>
-                    </>
-                  ) : (
-                    // Use actual data from the chart component
-                    memecoinVolumeData.map((item, index) => {
-                      return (
-                        <div key={`memecoin-legend-${index}`} className="flex items-start">
-                          <div 
-                            className="w-2 h-2 mr-2 rounded-sm mt-0.5 flex-shrink-0" 
-                            style={{ background: memecoinColors[index % memecoinColors.length] }}
-                          ></div>
-                          <span className="text-xs text-gray-300 break-words max-w-full">
-                            {item.token}
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+          }
+          legend={
+            isMemecoinVolumeLoading ? (
+              <>
+                <LegendItem label="Loading..." color="#f59e0b" isLoading={true} />
+                <LegendItem label="Loading..." color="#fbbf24" isLoading={true} />
+                <LegendItem label="Loading..." color="#fcd34d" isLoading={true} />
+              </>
+            ) : (
+              memecoinVolumeData.map((item, index) => (
+                <LegendItem
+                  key={`memecoin-legend-${index}`}
+                  label={item.token}
+                  color={memecoinColors[index % memecoinColors.length]}
+                  tooltipText={item.token}
+                />
+              ))
+            )
+          }
+        >
+          <MemecoinVolumeChart 
+            timeFilter={memecoinVolumeTimeFilter}
+            isModalOpen={memecoinModalOpen}
+            onModalClose={() => setMemecoinModalOpen(false)}
+            onDataUpdate={(data) => {
+              setMemecoinVolumeData(data);
+              setIsMemecoinVolumeLoading(false);
+            }}
+          />
+        </ChartCard>
       </div>
     </div>
   );

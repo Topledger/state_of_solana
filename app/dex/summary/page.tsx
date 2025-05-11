@@ -3,14 +3,16 @@
 import React, { useState, useEffect } from "react";
 import Counter from "../../components/shared/Counter";
 import { VolumeIcon, TvlIcon, UsersIcon, ExpandIcon, DownloadIcon } from "../../components/shared/Icons";
-import TvlVelocityChart, { getTvlVelocityChartColors } from "../../components/charts/TvlVelocityChart";
-import VelocityByDexChart from "../../components/charts/VelocityByDexChart";
+import TvlVelocityChart, { getTvlVelocityChartColors } from "../../components/charts/DEX/summary/TvlVelocityChart";
+import VelocityByDexChart from "../../components/charts/DEX/summary/VelocityByDexChart";
 import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
 import { TimeFilter as TVLTimeFilter, fetchTvlVelocityData, TvlVelocityDataPoint } from "../../api/dex/summary/chartData";
 import { fetchVelocityByDexData, getUniqueProgramTypes, getUniqueDates, TimeFilter, VelocityByDexDataPoint } from "../../api/dex/summary/velocityByDexData";
 import { getLatestVolumeStats } from "../../api/dex/summary/volumeData";
 import { getLatestTvlStats } from "../../api/dex/summary/tvlData";
 import { getLatestTradersStats } from "../../api/dex/summary/tradersData";
+import ChartCard from "../../components/shared/ChartCard";
+import LegendItem from "../../components/shared/LegendItem";
 
 // Define colors for program types (same as in VelocityByDexChart)
 const baseColors = [
@@ -382,183 +384,77 @@ export default function DexSummaryPage() {
       {/* Two chart containers stacked on mobile, side by side on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* TVL and Velocity Chart Container */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-blue-900/20 transition-all duration-300">
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">TVL and Velocity Trends</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Tracking value locked and market velocity across the ecosystem</p>
-            </div>
-            <div className="flex space-x-2">
-              <button 
-                className={`p-1.5 bg-blue-500/10 rounded-md text-blue-400 hover:bg-blue-500/20 transition-colors ${isTvlDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={downloadTvlVelocityCSV}
-                title="Download CSV"
-                disabled={isTvlDownloading}
-              >
-                {isTvlDownloading ? (
-                  <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <DownloadIcon className="w-4 h-4" />
-                )}
-              </button>
-            <button 
-              className="p-1.5 bg-blue-500/10 rounded-md text-blue-400 hover:bg-blue-500/20 transition-colors"
-                onClick={() => setTvlChartModalOpen(true)}
-                title="Expand Chart"
-            >
-              <ExpandIcon className="w-4 h-4" />
-            </button>
-            </div>
-          </div>
-          
-          {/* First Divider */}
-          <div className="h-px bg-gray-900 w-full"></div>
-          
-          {/* Filter Space - Match layout of DEX velocity chart */}
-          <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
-            <TimeFilterSelector value={tvlTimeFilter} onChange={setTvlTimeFilter} />
-          </div>
-          
-          {/* Second Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - Split into columns */}
-          <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-            {/* Chart Area */}
-            <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-80 lg:h-auto">
-              <TvlVelocityChart 
-                timeFilter={tvlTimeFilter} 
-                isModalOpen={tvlChartModalOpen}
-                onModalClose={() => setTvlChartModalOpen(false)}
-              />
-            </div>
-            
-            {/* Legend area */}
-            <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col">
-              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3 pt-1 pb-2 lg:pb-0">
-                <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
-                  {!isTvlDataLoading && tvlVelocityData.length > 0 ? (
-                    <>
-                      {getAvailableMetrics(tvlVelocityData).map(metric => (
-                        <div key={metric.key} className="flex items-start">
-                          <div 
-                            className={`w-2 h-2 mr-2 ${metric.shape === 'circle' ? 'rounded-full' : 'rounded-sm'} mt-0.5`}
-                            style={{ background: metric.color }}
-                          ></div>
-                          <span className="text-xs text-gray-300">{metric.displayName}</span>
-                        </div>
-                      ))}
-                    </>
-                  ) : (
-                    <>
-                      {/* Loading states */}
-                  <div className="flex items-start">
-                        <div className="w-2 h-2 bg-blue-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <div className="text-xs text-gray-300">Loading...</div>
-                  </div>
-                      
-                  <div className="flex items-start">
-                        <div className="w-2 h-2 bg-purple-500 mr-2 rounded-full mt-0.5 animate-pulse"></div>
-                        <div className="text-xs text-gray-300">Loading...</div>
-                  </div>
-                    </>
-                  )}
-                </div>
+        <ChartCard
+          title="TVL and Velocity Trends"
+          description="Tracking value locked and market velocity across the ecosystem"
+          accentColor="blue"
+          onExpandClick={() => setTvlChartModalOpen(true)}
+          onDownloadClick={downloadTvlVelocityCSV}
+          isDownloading={isTvlDownloading}
+          filterBar={<TimeFilterSelector value={tvlTimeFilter} onChange={setTvlTimeFilter} />}
+          legend={
+            !isTvlDataLoading && tvlVelocityData.length > 0 ? (
+              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
+                {getAvailableMetrics(tvlVelocityData).map(metric => (
+                  <LegendItem
+                    key={metric.key}
+                    label={metric.displayName}
+                    color={metric.color}
+                    shape={metric.shape === 'circle' ? 'circle' : 'square'}
+                  />
+                ))}
               </div>
-            </div>
-          </div>
-        </div>
+            ) : (
+              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
+                <LegendItem label="Loading..." color="#60a5fa" isLoading={true} />
+                <LegendItem label="Loading..." color="#a78bfa" shape="circle" isLoading={true} />
+              </div>
+            )
+          }
+        >
+          <TvlVelocityChart 
+            timeFilter={tvlTimeFilter} 
+            isModalOpen={tvlChartModalOpen}
+            onModalClose={() => setTvlChartModalOpen(false)}
+          />
+        </ChartCard>
         
         {/* Velocity By DEX Program Category Chart Container */}
-        <div className="bg-black/80 backdrop-blur-sm p-4 rounded-xl border border-gray-900 shadow-lg hover:shadow-purple-900/20 transition-all duration-300">
-          {/* Header Section with Title and Expand Icon */}
-          <div className="flex justify-between items-center mb-3">
-            <div className="-mt-1">
-              <h2 className="text-[12px] font-normal text-gray-300 leading-tight mb-0.5">Velocity By DEX Program Category</h2>
-              <p className="text-gray-500 text-[10px] tracking-wide">Tracking velocity trends across different DEX program types</p>
-            </div>
-            <div className="flex space-x-2">
-              <button 
-                className={`p-1.5 bg-purple-500/10 rounded-md text-purple-400 hover:bg-purple-500/20 transition-colors ${isDexDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={downloadDexVelocityCSV}
-                title="Download CSV"
-                disabled={isDexDownloading}
-              >
-                {isDexDownloading ? (
-                  <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <DownloadIcon className="w-4 h-4" />
-                )}
-              </button>
-              <button 
-                className="p-1.5 bg-purple-500/10 rounded-md text-purple-400 hover:bg-purple-500/20 transition-colors"
-                onClick={() => setVelocityChartModalOpen(true)}
-                title="Expand Chart"
-              >
-              <ExpandIcon className="w-4 h-4" />
-            </button>
-            </div>
-          </div>
-          
-          {/* First Divider */}
-          <div className="h-px bg-gray-900 w-full"></div>
-          
-          {/* Filter Space - Match layout of first chart */}
-          <div className="flex items-center justify-start pl-1 py-2 overflow-x-auto">
-            <TimeFilterSelector value={velocityTimeFilter} onChange={setVelocityTimeFilter} />
-          </div>
-          
-          {/* Second Divider */}
-          <div className="h-px bg-gray-900 w-full mb-3"></div>
-          
-          {/* Content Area - Split into columns on desktop, stacked on mobile */}
-          <div className="flex flex-col lg:flex-row h-[360px] lg:h-80">
-            {/* Chart Area */}
-            <div className="flex-grow lg:pr-3 lg:border-r lg:border-gray-900 h-80 lg:h-auto">
-              <VelocityByDexChart
-                timeFilter={velocityTimeFilter}
-                isModalOpen={velocityChartModalOpen}
-                onModalClose={() => setVelocityChartModalOpen(false)}
-              />
-            </div>
-            
-            {/* Legend Area - horizontal on mobile, vertical on desktop */}
-            <div className="w-full lg:w-1/5 mt-2 lg:mt-0 lg:pl-3 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible">
-              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3 pt-1 pb-2 lg:pb-0">
-                <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
-                  {!isLoadingDexVelocity && programTypes.length > 0 ? (
-                    programTypes.map((programType, index) => (
-                      <div key={programType} className="flex items-start whitespace-nowrap">
-                        <div 
-                          className="w-2 h-2 mr-2 rounded-sm mt-0.5" 
-                          style={{ background: getColorForProgramType(programType, programTypes) }}
-                        ></div>
-                        <span className="text-xs text-gray-300 truncate" title={programType}>
-                          {programType.length > 12 ? `${programType.substring(0, 12)}...` : programType}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="flex items-start">
-                        <div className="w-2 h-2 bg-blue-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <div className="text-xs text-gray-300">Loading...</div>
-                      </div>
-                  <div className="flex items-start">
-                        <div className="w-2 h-2 bg-purple-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <div className="text-xs text-gray-300">Loading...</div>
-                  </div>
-                  <div className="flex items-start">
-                        <div className="w-2 h-2 bg-green-500 mr-2 rounded-sm mt-0.5 animate-pulse"></div>
-                        <div className="text-xs text-gray-300">Loading...</div>
-                  </div>
-                    </>
-                  )}
-                </div>
+        <ChartCard
+          title="Velocity By DEX Program Category"
+          description="Tracking velocity trends across different DEX program types"
+          accentColor="purple"
+          onExpandClick={() => setVelocityChartModalOpen(true)}
+          onDownloadClick={downloadDexVelocityCSV}
+          isDownloading={isDexDownloading}
+          filterBar={<TimeFilterSelector value={velocityTimeFilter} onChange={setVelocityTimeFilter} />}
+          legend={
+            !isLoadingDexVelocity && programTypes.length > 0 ? (
+              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
+                {programTypes.map((programType, index) => (
+                  <LegendItem
+                    key={programType}
+                    label={programType}
+                    color={getColorForProgramType(programType, programTypes)}
+                    tooltipText={programType}
+                  />
+                ))}
               </div>
-            </div>
-          </div>
-        </div>
+            ) : (
+              <div className="flex flex-row lg:flex-col gap-4 lg:gap-3">
+                <LegendItem label="Loading..." color="#60a5fa" isLoading={true} />
+                <LegendItem label="Loading..." color="#a78bfa" isLoading={true} />
+                <LegendItem label="Loading..." color="#34d399" isLoading={true} />
+              </div>
+            )
+          }
+        >
+          <VelocityByDexChart
+            timeFilter={velocityTimeFilter}
+            isModalOpen={velocityChartModalOpen}
+            onModalClose={() => setVelocityChartModalOpen(false)}
+          />
+        </ChartCard>
       </div>
     </>
   );
