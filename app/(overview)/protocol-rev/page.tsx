@@ -3,6 +3,12 @@
 import React, { useState, useEffect } from "react";
 import Counter from "../../components/shared/Counter";
 import { fetchProtocolRevData, formatCurrency, getLatestValidatorData } from "../../api/overview/protocol-rev/protocolData";
+import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
+import DisplayModeFilter, { DisplayMode } from "../../components/shared/filters/DisplayModeFilter";
+import ChartCard from "../../components/shared/ChartCard";
+import LegendItem from "../../components/shared/LegendItem";
+import PlatformRevenueChart from "../../components/charts/protocol-revenue/summary/PlatformRevenueChart";
+import { TimeFilter as RevenueTimeFilter, normalizePlatformName } from "../../api/protocol-revenue/summary/platformRevenueData";
 
 // Icons
 const TEVIcon = ({ className = "w-5 h-5" }) => (
@@ -42,6 +48,13 @@ export default function ProtocolRevPage() {
   const [validatorData, setValidatorData] = useState({
     activeValidators: 0
   });
+
+  // Chart state
+  const [timeFilter, setTimeFilter] = useState<RevenueTimeFilter>('M');
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('absolute');
+  const [platformRevenueChartModalOpen, setPlatformRevenueChartModalOpen] = useState(false);
+  const [chartPlatforms, setChartPlatforms] = useState<Array<{platform: string, color: string, revenue: number}>>([]);
+  const [isLoadingPlatforms, setIsLoadingPlatforms] = useState(true);
 
   // Fetch protocol revenue data
   useEffect(() => {
@@ -84,11 +97,16 @@ export default function ProtocolRevPage() {
     fetchData();
   }, []);
 
+  // Set loading status for platforms from child component
+  useEffect(() => {
+    setIsLoadingPlatforms(chartPlatforms.length === 0);
+  }, [chartPlatforms]);
+
   return (
     <div className="space-y-6">
       
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Counter
           title="Total Economic Value (TEV)"
           value={isLoading ? "Loading..." : formatCurrency(protocolData.TEV)}
@@ -112,6 +130,70 @@ export default function ProtocolRevPage() {
           variant="purple"
           isLoading={isValidatorsLoading}
         />
+      </div>
+
+      <div>
+        <ChartCard
+          title="Protocol Revenue by Platform"
+          description="Breakdown of protocol revenue by platform"
+          accentColor="green"
+          onExpandClick={() => setPlatformRevenueChartModalOpen(true)}
+          legendWidth="1/5"
+          className="h-[500px]"
+          filterBar={
+            <div className="flex flex-wrap gap-3 items-center">
+              <TimeFilterSelector 
+                value={timeFilter} 
+                onChange={(val: RevenueTimeFilter) => setTimeFilter(val)}
+                options={[
+                  { value: 'W', label: 'W' },
+                  { value: 'M', label: 'M' },
+                  { value: 'Q', label: 'Q' },
+                  { value: 'Y', label: 'Y' }
+                ]}
+              />
+              <DisplayModeFilter 
+                mode={displayMode}
+                onChange={(val) => setDisplayMode(val)}
+                isCompact={true}
+              />
+            </div>
+          }
+          legend={
+            <>
+              {/* Always show platforms, with loading state if appropriate */}
+              {isLoadingPlatforms && chartPlatforms.length === 0 ? (
+                // Loading state
+                <>
+                  <LegendItem label="Loading..." color="#60a5fa" isLoading={true} />
+                  <LegendItem label="Loading..." color="#a78bfa" isLoading={true} />
+                  <LegendItem label="Loading..." color="#34d399" isLoading={true} />
+                </>
+              ) : (
+                // Use chartPlatforms directly from the PlatformRevenueChart component
+                chartPlatforms.map(({ platform, color, revenue }) => (
+                  <LegendItem
+                    key={platform}
+                    label={normalizePlatformName(platform)}
+                    color={color}
+                    shape="square"
+                    tooltipText={revenue > 0 ? formatCurrency(revenue) : undefined}
+                  />
+                ))
+              )}
+            </>
+          }
+        >
+          <PlatformRevenueChart
+            timeFilter={timeFilter}
+            displayMode={displayMode}
+            isModalOpen={platformRevenueChartModalOpen}
+            onModalClose={() => setPlatformRevenueChartModalOpen(false)}
+            onTimeFilterChange={(val: RevenueTimeFilter) => setTimeFilter(val)}
+            onDisplayModeChange={(val: DisplayMode) => setDisplayMode(val)}
+            platformsChanged={setChartPlatforms}
+          />
+        </ChartCard>
       </div>
 
       

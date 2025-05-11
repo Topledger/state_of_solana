@@ -37,7 +37,7 @@ export default function Sidebar() {
         <ul className="space-y-2.5">
           {menuItems.map((item) => {
             const isActive = 
-              pathname === item.path || 
+              (item.path === '/' && (pathname === '/' || pathname?.startsWith('/market-dynamics') || pathname?.startsWith('/protocol-rev') || pathname?.startsWith('/network-usage') || pathname?.startsWith('/dashboard'))) || 
               (item.path !== '/' && pathname?.startsWith(item.path));
               
             return (
