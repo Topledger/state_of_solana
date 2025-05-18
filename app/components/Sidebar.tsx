@@ -36,9 +36,21 @@ export default function Sidebar() {
       <nav className="flex-1 px-2 py-3">
         <ul className="space-y-2.5">
           {menuItems.map((item) => {
-            const isActive = 
-              (item.path === '/' && (pathname === '/' || pathname?.startsWith('/market-dynamics') || pathname?.startsWith('/protocol-rev') || pathname?.startsWith('/network-usage') || pathname?.startsWith('/dashboard'))) || 
-              (item.path !== '/' && pathname?.startsWith(item.path));
+            // Check for exact paths first to avoid conflicts
+            let isActive = false;
+            
+            if (item.path === '/protocol-revenue' && pathname?.startsWith('/protocol-revenue')) {
+              isActive = true;
+            } else if (item.path === '/' && (
+              pathname === '/' || 
+              pathname?.startsWith('/market-dynamics') || 
+              pathname?.startsWith('/network-usage') || 
+              pathname?.startsWith('/dashboard')
+            )) {
+              isActive = true;
+            } else if (item.path !== '/' && pathname?.startsWith(item.path) && item.path !== '/protocol-revenue') {
+              isActive = true;
+            }
               
             return (
               <li key={item.name}>

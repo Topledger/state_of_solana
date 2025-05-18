@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { ExpandIcon, DownloadIcon } from './Icons';
+import Loader from './Loader';
 
 interface ChartCardProps {
   title: string;
@@ -13,6 +14,7 @@ interface ChartCardProps {
   accentColor?: 'blue' | 'purple' | 'green' | 'orange' | 'indigo';
   className?: string;
   legendWidth?: '1/4' | '1/5' | '1/6';
+  isLoading?: boolean;
 }
 
 const ChartCard: React.FC<ChartCardProps> = ({
@@ -27,6 +29,7 @@ const ChartCard: React.FC<ChartCardProps> = ({
   accentColor = 'blue',
   className = '',
   legendWidth = '1/5',
+  isLoading = false,
 }) => {
   // Define color variants
   const colorVariants = {
@@ -83,7 +86,7 @@ const ChartCard: React.FC<ChartCardProps> = ({
               disabled={isDownloading}
             >
               {isDownloading ? (
-                <div className={`w-4 h-4 border-2 ${colors.border} border-t-transparent rounded-full animate-spin`}></div>
+                <Loader size="xs" className="w-4 h-4" />
               ) : (
                 <DownloadIcon className="w-4 h-4" />
               )}
@@ -118,7 +121,12 @@ const ChartCard: React.FC<ChartCardProps> = ({
       {/* Content Area - Split into columns on desktop, stacked on mobile */}
       <div className="flex flex-col lg:flex-row mt-3 h-[360px] lg:h-[380px]">
         {/* Chart Area */}
-        <div className={`flex-grow ${legend ? 'lg:pr-4 lg:border-r lg:border-gray-900' : ''} h-80 lg:h-auto`}>
+        <div className={`flex-grow ${legend ? 'lg:pr-4 lg:border-r lg:border-gray-900' : ''} h-80 lg:h-auto relative`}>
+          {isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10 rounded-md">
+              <Loader size="md" />
+            </div>
+          )}
           {children}
         </div>
         

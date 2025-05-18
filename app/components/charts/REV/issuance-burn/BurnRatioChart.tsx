@@ -48,6 +48,16 @@ export const burnRatioColors = {
   grid: '#1f2937',
 };
 
+// Value-based color assignment
+const getValueBasedColors = (data: IssuanceDataPoint[]) => {
+  // For burn ratio, we just use a consistent color since it's a single metric chart
+  // But we're keeping the function for consistency with other components
+  return {
+    ...burnRatioColors,
+    burnRatio: '#f43f5e' // red - keeping the original color
+  };
+};
+
 // Export colors for external use
 export const getBurnRatioColors = () => {
   return {

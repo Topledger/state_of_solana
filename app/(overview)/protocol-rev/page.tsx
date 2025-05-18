@@ -7,7 +7,7 @@ import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
 import DisplayModeFilter, { DisplayMode } from "../../components/shared/filters/DisplayModeFilter";
 import ChartCard from "../../components/shared/ChartCard";
 import LegendItem from "../../components/shared/LegendItem";
-import PlatformRevenueChart from "../../components/charts/protocol-revenue/summary/PlatformRevenueChart";
+//import PlatformRevenueChart from "../../components/charts/protocol-revenue/summary/PlatformRevenueChartStacked";
 import { TimeFilter as RevenueTimeFilter, normalizePlatformName } from "../../api/protocol-revenue/summary/platformRevenueData";
 
 // Icons

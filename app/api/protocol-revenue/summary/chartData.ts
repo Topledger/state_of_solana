@@ -222,4 +222,66 @@ const calculatePercentChange = (current: number, previous: number): number => {
   
   // Round to 1 decimal place
   return parseFloat(change.toFixed(1));
+};
+
+// Function to prepare protocol revenue data for CSV export
+export const prepareProtocolRevenueCSV = async (timeFilter: TimeFilter): Promise<string> => {
+  try {
+    const data = await fetchProtocolRevenueData(timeFilter);
+    
+    // If no data, return empty string
+    if (!data.length) return '';
+    
+    // Define the CSV header
+    const headers = ["Date", "Protocol Revenue ($)", "Solana Revenue ($)"];
+    
+    // Convert data to CSV format
+    const rows = data.map(point => [
+      formatDate(point.month, timeFilter),
+      point.protocol_revenue.toFixed(2),
+      point.Solana_Rev.toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    return csvContent;
+  } catch (error) {
+    console.error('Error preparing CSV data:', error);
+    return '';
+  }
+};
+
+// Function to prepare cumulative protocol revenue data for CSV export
+export const prepareCumulativeRevenueCSV = async (timeFilter: TimeFilter): Promise<string> => {
+  try {
+    const data = await fetchProtocolRevenueData(timeFilter);
+    
+    // If no data, return empty string
+    if (!data.length) return '';
+    
+    // Define the CSV header
+    const headers = ["Date", "Cumulative Protocol Revenue ($)", "Cumulative Solana Revenue ($)"];
+    
+    // Convert data to CSV format
+    const rows = data.map(point => [
+      formatDate(point.month, timeFilter),
+      point.cumulative_protocol_revenue.toFixed(2),
+      point.Cumulative_Solana_Rev.toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    return csvContent;
+  } catch (error) {
+    console.error('Error preparing cumulative CSV data:', error);
+    return '';
+  }
 }; 

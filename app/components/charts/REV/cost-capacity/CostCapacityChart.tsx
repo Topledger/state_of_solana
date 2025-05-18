@@ -14,6 +14,7 @@ import TimeFilterSelector from '../../../shared/filters/TimeFilter';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import CurrencyFilter from '../../../shared/filters/CurrencyFilter';
 import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayModeFilter';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -49,16 +50,16 @@ interface CostCapacityChartProps {
 
 // Chart colors
 export const costCapacityColors = {
-  base_fee: '#60a5fa', // blue
-  priority_fee: '#a78bfa', // purple
-  jito_total_tips: '#34d399', // green
-  vote_fees: '#f97316', // orange
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  base_fee: colors[0], // blue
+  priority_fee: colors[1], // purple
+  jito_total_tips: colors[2], // green
+  vote_fees: colors[3], // orange
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
-// Stack implementation for BarStack
+// Get stacked data with colors based on value
 const getStackedData = (
   data: CostCapacityDataPoint[], 
   keys: string[]
@@ -114,12 +115,39 @@ const getStackedData = (
   return result;
 };
 
-// Modified colors function that accepts a string key
-const getKeyColor = (key: string) => {
-  if (key in costCapacityColors) {
-    return costCapacityColors[key as keyof typeof costCapacityColors];
-  }
-  return '#cccccc'; // fallback
+// Sort fee types by total value and assign colors accordingly
+const getKeyColors = (data: CostCapacityDataPoint[]) => {
+  // Calculate total value for each fee type
+  const totals: { [key: string]: number } = {};
+  
+  stackKeys.forEach(key => {
+    totals[key] = data.reduce((sum, d) => sum + (Number(d[key as keyof typeof d]) || 0), 0);
+  });
+  
+  // Sort keys by their total values (highest first)
+  const sortedKeys = [...stackKeys].sort((a, b) => totals[b] - totals[a]);
+  
+  // Default colors from the colors array
+  const defaultColors = [
+    colors[0], // blue
+    colors[1], // purple
+    colors[2], // green
+    colors[3]  // orange
+  ];
+  
+  // Create a map of key to color
+  const keyColors: { [key: string]: string } = {};
+  sortedKeys.forEach((key, index) => {
+    keyColors[key] = defaultColors[index % defaultColors.length];
+  });
+  
+  return keyColors;
+};
+
+// Modified colors function that accepts a string key and data
+const getKeyColor = (key: string, data: CostCapacityDataPoint[]) => {
+  const keyColors = getKeyColors(data);
+  return keyColors[key] || '#cccccc'; // fallback
 };
 
 const CostCapacityChart: React.FC<CostCapacityChartProps> = ({ 
@@ -641,6 +669,9 @@ const CostCapacityChart: React.FC<CostCapacityChartProps> = ({
       ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
       : () => { setBrushDomain(null); setIsBrushActive(false); };
     
+    // Get the dynamic key colors based on data values
+    const keyColors = getKeyColors(activeFilteredData);
+    
     // Show loading state
     if (activeLoading) {
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
@@ -670,7 +701,7 @@ const CostCapacityChart: React.FC<CostCapacityChartProps> = ({
               const value = (tooltip.dataPoint as any)[key] || 0;
               
               // For percentage mode, calculate the total of all values for this data point
-              let tooltipValue = value;
+              const tooltipValue = value;
               let total = 0;
               
               if (activeDisplayMode === 'percent') {
@@ -678,7 +709,7 @@ const CostCapacityChart: React.FC<CostCapacityChartProps> = ({
               }
               
               return {
-                color: costCapacityColors[key as keyof typeof costCapacityColors],
+                color: keyColors[key] || costCapacityColors.tickLabels,
                 label: getFeeTypeDisplayName(key),
                 value: formatTooltipValue(value, activeCurrencyFilter, activeDisplayMode === 'percent', total),
                 shape: 'square'
@@ -882,14 +913,19 @@ const CostCapacityChart: React.FC<CostCapacityChartProps> = ({
     );
   };
 
-  return (
-    <div className="h-full w-full relative">
-      {renderChartContent(0, 0)}
-      
-      {/* Modal */}
-      <Modal isOpen={isModalOpen} onClose={onModalClose} title="Transaction Fees" subtitle="Tracking different fee components in Solana ecosystem">
-        
-        {/* Filters */}
+  // Render the modal content with enhanced UI and filters
+  const renderModalContent = () => {
+    const categories = stackKeys.map(key => ({
+      key,
+      displayName: getFeeTypeDisplayName(key),
+    }));
+    
+    // Get dynamic colors based on modal data
+    const keyColors = getKeyColors(modalFilteredData.length > 0 ? modalFilteredData : modalData);
+    
+    return (
+      <div className="p-4 w-full h-full">
+        {/* Filters - horizontal row */}
         <div className="flex items-center justify-between pl-1 py-0 mb-3">
           <div className="flex space-x-4 items-center">
             <TimeFilterSelector 
@@ -936,18 +972,33 @@ const CostCapacityChart: React.FC<CostCapacityChartProps> = ({
             {/* Legend area - 10% width */}
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
               <div className="text-[10px] text-gray-400 mb-2">FEE TYPES</div>
-              {stackKeys.map((key: string) => (
-                <div key={key} className="flex items-center mb-1.5">
-                  <div 
-                    className="w-2.5 h-2.5 rounded-sm mr-1.5" 
-                    style={{ backgroundColor: costCapacityColors[key as keyof typeof costCapacityColors] }}
-                  ></div>
-                  <span className="text-[11px] text-gray-300">{getFeeTypeDisplayName(key)}</span>
-                </div>
-              ))}
+              {stackKeys.map((key: string) => {
+                // Get dynamic color based on data values
+                const color = keyColors[key] || costCapacityColors.tickLabels;
+                return (
+                  <div key={key} className="flex items-center mb-1.5">
+                    <div 
+                      className="w-2.5 h-2.5 rounded-sm mr-1.5" 
+                      style={{ backgroundColor: color }}
+                    ></div>
+                    <span className="text-[11px] text-gray-300">{getFeeTypeDisplayName(key)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-full w-full relative">
+      {renderChartContent(0, 0)}
+      
+      {/* Modal */}
+      <Modal isOpen={isModalOpen} onClose={onModalClose} title="Transaction Fees" subtitle="Tracking different fee components in Solana ecosystem">
+        {renderModalContent()}
       </Modal>
     </div>
   );

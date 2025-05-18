@@ -88,11 +88,47 @@ export const solBurnColors = {
   grid: '#1f2937',
 };
 
-// Export a function to get chart colors for external use
-export const getSolBurnChartColors = () => {
+// Value-based color assignment based on total burn values
+const getValueBasedColors = (data: SolBurnDataPoint[]) => {
+  if (data.length === 0) return solBurnColors;
+  
+  // Define metrics to consider
+  const metrics = ['sol_burn', 'cumulative_sol_burn'];
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Math.abs(Number(d[metric as keyof typeof d])) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    '#ef4444', // red
+    '#ec4899', // pink
+  ];
+  
+  // Create a dynamic color map
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
   return {
-    burn: solBurnColors.burnBar,
-    cumulative: solBurnColors.cumulativeLine
+    ...solBurnColors,
+    burnBar: colorMap.sol_burn || solBurnColors.burnBar,
+    cumulativeLine: colorMap.cumulative_sol_burn || solBurnColors.cumulativeLine
+  };
+};
+
+// Export a function to get chart colors for external use
+export const getSolBurnChartColors = (data?: SolBurnDataPoint[]) => {
+  const colors = data ? getValueBasedColors(data) : solBurnColors;
+  return {
+    burn: colors.burnBar,
+    cumulative: colors.cumulativeLine
   };
 };
 
@@ -529,7 +565,7 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
 
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
-    // Use modal data if in modal mode, otherwise use main data
+    // Use modal or main data based on context
     const activeData = isModal ? modalData : data;
     const activeFilteredData = isModal ? (isModalBrushActive ? modalFilteredData : modalData) : (isBrushActive ? filteredData : data);
     const activeLoading = isModal ? modalLoading : loading;
@@ -537,6 +573,12 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
     const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
     const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
     const activeHandleBrushChange = isModal ? handleModalBrushChange : handleBrushChange;
+    const activeClearBrush = isModal 
+      ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
+      : () => { setBrushDomain(null); setIsBrushActive(false); };
+    
+    // Get dynamic colors based on value
+    const dynamicColors = getValueBasedColors(activeFilteredData);
     
     // Show loading state
     if (activeLoading) {
@@ -583,8 +625,8 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
               }
             })()}
             items={[
-              { color: solBurnColors.burnBar, label: 'SOL Burn', value: formatBurn(tooltip.dataPoint.sol_burn, currency), shape: 'square' },
-              { color: solBurnColors.cumulativeLine, label: 'Cumulative Burn', value: formatBurn(tooltip.dataPoint.cumulative_sol_burn, currency), shape: 'circle' }
+              { color: dynamicColors.burnBar, label: 'SOL Burn', value: formatBurn(tooltip.dataPoint.sol_burn, currency), shape: 'square' },
+              { color: dynamicColors.cumulativeLine, label: 'Cumulative Burn', value: formatBurn(tooltip.dataPoint.cumulative_sol_burn, currency), shape: 'circle' }
             ]}
             top={tooltip.top}
             left={tooltip.left}
@@ -757,7 +799,7 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
                           y={innerHeight - barHeight} 
                           width={barWidth} 
                           height={barHeight}
-                          fill={solBurnColors.burnBar} 
+                          fill={dynamicColors.burnBar} 
                           opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7} 
                         />
                       );
@@ -792,7 +834,7 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
                         }
                       }}
                       y={(d) => cumulativeScale(d.cumulative_sol_burn)}
-                      stroke={solBurnColors.cumulativeLine} 
+                      stroke={dynamicColors.cumulativeLine} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -902,31 +944,19 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
             isModal={isModal}
             activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
             onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
-            onClearBrush={isModal 
-              ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
-              : () => { setBrushDomain(null); setIsBrushActive(false); }
-            }
+            onClearBrush={activeClearBrush}
             getDate={(d) => {
               // More robust date parsing for the brush component
               try {
                 const date = new Date(d.date);
-                if (!isNaN(date.getTime())) {
-                  return date;
-                }
+                return date.toISOString(); // Return as string, not Date object
               } catch (e) {
-                console.warn(`Failed to parse date: ${d.date}`);
+                // Fallback if date parsing fails
+                return d.date || '';
               }
-              
-              // Use a fallback date based on the index if date parsing fails
-              const currentData = isModal ? modalData : data;
-              const index = currentData.indexOf(d);
-              const today = new Date();
-              const fallbackDate = new Date();
-              fallbackDate.setDate(today.getDate() - (currentData.length - index - 1));
-              return fallbackDate;
             }}
             getValue={(d) => Math.max(0.1, d.sol_burn)} // Ensure non-zero values
-            lineColor={solBurnColors.burnBar}
+            lineColor={dynamicColors.burnBar}
             margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
           />
         </div>
@@ -957,8 +987,8 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
                     {getSolBurnChartMetrics({ 
-                      burn: solBurnColors.burnBar, 
-                      cumulative: solBurnColors.cumulativeLine 
+                      burn: dynamicColors.burnBar, 
+                      cumulative: dynamicColors.cumulativeLine 
                     }).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 

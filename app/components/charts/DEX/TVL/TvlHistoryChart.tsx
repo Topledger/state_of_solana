@@ -12,6 +12,7 @@ import ChartTooltip from '../../../shared/ChartTooltip';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define TimeFilter type to match what's used in the parent component
 export type TimeFilter = 'W' | 'M' | 'Q' | 'Y';
@@ -94,10 +95,10 @@ interface TvlHistoryChartProps {
 }
 
 export const tvlHistoryColors = {
-  axisLines: '#374151',
-  tickLabels: '#9ca3af',
-  tvlLine: '#60a5fa',
-  grid: '#374151',
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+  tvlLine: colors[0],
+  grid: grid,
 };
 
 const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
@@ -109,6 +110,9 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
   const [rawData, setRawData] = useState<TvlHistoryDataPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // State for TVL line color
+  const [tvlLineColor, setTvlLineColor] = useState<string>(colors[0]);
   
   // Brush and filtering states
   const [filteredData, setFilteredData] = useState<TvlHistoryDataPoint[]>([]);
@@ -302,6 +306,9 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
       // Directly use the data - the API should be handling validation
       setRawData(chartData);
       
+      // For consistency with other charts, set TVL color to first color
+      setTvlLineColor(colors[0]);
+      
     } catch (err) {
       console.error('[TvlHistoryChart] Error loading TVL history data:', err);
       let message = 'Failed to load data.';
@@ -468,7 +475,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
           <Group left={margin.left} top={margin.top}>
             {/* Display active brush status */}
             {(isModal ? isModalBrushActive : isBrushActive) && (
-              <text x={0} y={-8} fontSize={8} fill={tvlHistoryColors.tvlLine} textAnchor="start">
+              <text x={0} y={-8} fontSize={8} fill={tvlLineColor} textAnchor="start">
                 {`Filtered: ${chartData.length} item${chartData.length !== 1 ? 's' : ''}`}
               </text>
             )}
@@ -491,7 +498,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
                 return timeScale(date);
               }}
               y={(d) => tvlScale(d.tvl)}
-              stroke={tvlHistoryColors.tvlLine} 
+              stroke={tvlLineColor} 
               strokeWidth={2} 
               curve={curveMonotoneX} 
             />
@@ -546,7 +553,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
       console.error('[TvlHistoryChart] Error rendering chart:', error);
       return null;
     }
-  }, [data, filteredData, modalFilteredData, isBrushActive, isModalBrushActive]);
+  }, [data, filteredData, modalFilteredData, isBrushActive, isModalBrushActive, tvlLineColor]);
 
   // Render chart content (either in card or modal)
   const renderChartContent = (isModal = false) => {
@@ -586,7 +593,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
               <ChartTooltip
                 title={formatDate(tooltip.dataPoint.date)}
                 items={[
-                  { color: tvlHistoryColors.tvlLine, label: 'TVL', value: formatTvl(tooltip.dataPoint.tvl), shape: 'circle' }
+                  { color: tvlLineColor, label: 'TVL', value: formatTvl(tooltip.dataPoint.tvl), shape: 'circle' }
                 ]}
                 top={tooltip.top}
                 left={tooltip.left}
@@ -625,7 +632,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
                 }}
                 getDate={(d) => d.date}
                 getValue={(d) => d.tvl}
-                lineColor={tvlHistoryColors.tvlLine}
+                lineColor={tvlLineColor}
                 margin={{ top: 5, right: 20, bottom: 10, left: 45 }}
               />
             </div>
@@ -663,7 +670,7 @@ const TvlHistoryChart: React.FC<TvlHistoryChartProps> = ({
               <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
                 <div className="text-[10px] text-gray-400 mb-2">METRICS</div>
                 <div className="flex items-center mb-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm mr-1.5" style={{ backgroundColor: tvlHistoryColors.tvlLine }}></div>
+                  <div className="w-2.5 h-2.5 rounded-sm mr-1.5" style={{ backgroundColor: tvlLineColor }}></div>
                   <span className="text-[11px] text-gray-300">TVL</span>
                 </div>
               </div>

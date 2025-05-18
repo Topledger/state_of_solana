@@ -25,6 +25,7 @@ import { ExpandIcon } from '../../../shared/Icons';
 import DataTypeFilter from '../../../shared/filters/DataTypeFilter';
 import DisplayModeFilter from '../../../shared/filters/DisplayModeFilter';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, getFirstNColors, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define a type for the aggregator colors
 type AggregatorColors = {
@@ -33,23 +34,38 @@ type AggregatorColors = {
 
 // Define colors for aggregators
 export const aggregatorColors: AggregatorColors = {
-  'Jupiter': '#60a5fa', // blue
-  'OKX': '#34d399', // green
-  'Non-Aggregator': '#a78bfa', // purple
+  'Jupiter': colors[0], // blue (1st color)
+  'OKX': colors[2], // green (3rd color)
+  'Non-Aggregator': colors[1], // purple (2nd color)
   // Fallback color for any other aggregators that might appear
-  'default': '#f97316' // orange
+  'default': colors[3] // orange (4th color)
 };
 
 // Define chart colors for consistency with VolumeHistoryChart
 export const aggregatorsChartColors = {
-  grid: '#374151',
-  axisLines: '#374151',
-  tickLabels: '#9ca3af',
+  grid: axisLines,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 // Get the color for a specific aggregator
-const getAggregatorColor = (aggregator: string): string => {
-  return aggregatorColors[aggregator] || aggregatorColors.default;
+const getAggregatorColor = (aggregator: string, allAggregators: string[], volumesByAggregator: Record<string, number>): string => {
+  // If it's a predefined aggregator, use its preset color
+  if (aggregatorColors[aggregator]) {
+    return aggregatorColors[aggregator];
+  }
+  
+  // For other aggregators, assign colors based on volume
+  // Find the index of this aggregator when sorted by volume
+  const sortedAggregators = [...allAggregators]
+    .filter(a => !aggregatorColors[a]) // Only sort aggregators without preset colors
+    .sort((a, b) => (volumesByAggregator[b] || 0) - (volumesByAggregator[a] || 0));
+  
+  const index = sortedAggregators.indexOf(aggregator);
+  if (index === -1) return aggregatorColors.default;
+  
+  // Start at index 4 to avoid the preset colors
+  return colors[(index + 4) % colors.length];
 };
 
 // Interface for props
@@ -450,7 +466,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
         aggregator: agg,
         value: displayValue,
         rawValue: itemValue,
-        color: getAggregatorColor(agg)
+        color: getAggregatorColor(agg, chartAggregators, calculateTotals(chartData, chartMonths, chartDataType))
       };
     }).sort((a, b) => b.value - a.value);
     
@@ -584,7 +600,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                     aggregator: agg,
                     value: displayValue,
                     rawValue: itemValue,
-                    color: getAggregatorColor(agg)
+                    color: getAggregatorColor(agg, currentAggregators, totals)
                   };
                 }).filter(item => item.rawValue > 0) // Only show non-zero values
                   .sort((a, b) => b.rawValue - a.rawValue); // Sort by raw value, highest first
@@ -637,7 +653,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                 // Color scale
                 const colorScale = scaleOrdinal<string, string>({
                   domain: chartAggregators,
-                  range: chartAggregators.map(agg => getAggregatorColor(agg))
+                  range: chartAggregators.map(agg => getAggregatorColor(agg, chartAggregators, calculateTotals(chartData, chartMonths, chartDataType)))
                 });
                 
                 return (
@@ -786,7 +802,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
               }}
               getDate={(d) => (d as { date: string }).date}
               getValue={(d) => (d as { value: number }).value}
-              lineColor={dataType === 'volume' ? "#60a5fa" : "#34d399"}
+              lineColor={dataType === 'volume' ? colors[0] : colors[2]}
               margin={{ top: 5, right: 20, bottom: 10, left: 45 }}
             />
           </div>
@@ -849,7 +865,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                     aggregator: agg,
                     value: displayValue,
                     rawValue: itemValue,
-                    color: getAggregatorColor(agg)
+                    color: getAggregatorColor(agg, currentAggregators, totals)
                   };
                 }).filter(item => item.rawValue > 0) // Only show non-zero values
                   .sort((a, b) => b.rawValue - a.rawValue); // Sort by raw value, highest first
@@ -908,7 +924,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                 }}
                 getDate={(d) => (d as { date: string }).date}
                 getValue={(d) => (d as { value: number }).value}
-                lineColor={dataType === 'volume' ? "#60a5fa" : "#34d399"}
+                lineColor={dataType === 'volume' ? colors[0] : colors[2]}
                 margin={{ top: 5, right: 20, bottom: 10, left: 45 }}
               />
             </div>
@@ -925,7 +941,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                   <div key={aggregator} className="flex items-start whitespace-nowrap">
                     <div 
                       className="w-2 h-2 mr-2 rounded-sm mt-0.5" 
-                      style={{ background: getAggregatorColor(aggregator) }}
+                      style={{ background: getAggregatorColor(aggregator, chartAggregators, calculateTotals(data, getUniqueMonths(data), dataType)) }}
                     ></div>
                     <span className="text-xs text-gray-300 truncate" title={aggregator}>
                       {aggregator.length > 12 ? `${aggregator.substring(0, 12)}...` : aggregator}
@@ -999,7 +1015,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
     // Color scale
     const colorScale = scaleOrdinal<string, string>({
       domain: chartAggregators,
-      range: chartAggregators.map(agg => getAggregatorColor(agg))
+      range: chartAggregators.map(agg => getAggregatorColor(agg, chartAggregators, calculateTotals(chartData, getUniqueMonths(chartData), chartDataType)))
     });
     
     return (
@@ -1164,7 +1180,7 @@ const AggregatorsChart: React.FC<AggregatorsChartProps> = ({
                       <div key={aggregator} className="flex items-start whitespace-nowrap">
                         <div 
                           className="w-2 h-2 mr-2 rounded-sm mt-0.5" 
-                          style={{ background: getAggregatorColor(aggregator) }}
+                          style={{ background: getAggregatorColor(aggregator, getUniqueAggregators(data), calculateTotals(data, getUniqueMonths(data), dataType)) }}
                         ></div>
                         <span className="text-xs text-gray-300 truncate" title={aggregator}>
                           {aggregator.length > 12 ? `${aggregator.substring(0, 12)}...` : aggregator}

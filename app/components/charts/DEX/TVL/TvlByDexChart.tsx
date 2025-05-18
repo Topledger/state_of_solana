@@ -14,6 +14,9 @@ import Loader from '../../../shared/Loader';
 import ChartTooltip from '../../../shared/ChartTooltip';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
+import { 
+  colors, getColorByIndex, grid, axisLines, tickLabels 
+} from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -37,15 +40,15 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 
 // Chart colors for consistent styling
 export const tvlByDexChartColors = {
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 // Export a function to get chart colors for external use
 export const getTvlByDexChartColors = () => {
   return {
-    primary: '#a78bfa' // purple (Raydium color)
+    primary: colors[0]
   };
 };
 
@@ -56,41 +59,20 @@ interface TvlByDexChartProps {
   onDataUpdate?: (data: { dex: string; tvl: number; percentage: number }[]) => void;
 }
 
-// DEX color scheme
-const dexColors: Record<string, string> = {
-  'Raydium': '#a78bfa', // purple
-  'Orca': '#60a5fa',    // blue
-  'Meteora': '#34d399', // green
-  'Phoenix': '#f97316', // orange
-  'Ellipsis Labs': '#f43f5e', // rose
-  'OpenBook': '#facc15', // yellow
-  'Crema Finance': '#14b8a6', // teal
-  'Saros Finance': '#8b5cf6', // violet
-  'Cropper Finance': '#ec4899', // pink
-  'Other': '#6b7280', // gray
-};
-
 // Generate fallback color for any DEX not in the color map
 const getFallbackColor = (dex: string | undefined | null) => {
   if (!dex) {
-    return '#6b7280'; // Return gray as a default color when dex is undefined or null
+    return colors[9]; // Return gray as a default color when dex is undefined or null
   }
   
   try {
-    // Simple hash function to generate consistent colors for unknown DEXes
+    // Simple hash function to generate consistent colors
     const hash = Array.from(String(dex)).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const hue = hash % 360;
-    return `hsl(${hue}, 70%, 60%)`;
+    return getColorByIndex(hash);
   } catch (error) {
     console.error('[TvlByDexChart] Error generating fallback color:', error);
-    return '#6b7280'; // Return gray as fallback for any errors
+    return colors[9]; // Return gray as fallback for any errors
   }
-};
-
-// Get color for a DEX, with fallback
-const getDexColor = (dex: string | undefined | null) => {
-  if (!dex) return '#6b7280';
-  return dexColors[dex] || getFallbackColor(dex);
 };
 
 export default function TvlByDexChart({ 
@@ -106,6 +88,9 @@ export default function TvlByDexChart({
   const [uniqueDexes, setUniqueDexes] = useState<string[]>([]);
   const [uniqueDates, setUniqueDates] = useState<string[]>([]);
   const [aggregatedData, setAggregatedData] = useState<Record<string, Record<string, number>>>({});
+  
+  // Color mapping state - maps DEX names to colors based on TVL
+  const [dexColorMap, setDexColorMap] = useState<Record<string, string>>({});
   
   // Filtering and brushing states
   const [filteredData, setFilteredData] = useState<TvlByDexDataPoint[]>([]);
@@ -147,6 +132,12 @@ export default function TvlByDexChart({
   
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const modalChartRef = useRef<HTMLDivElement>(null);
+  
+  // Get color for a DEX from the dynamic color map
+  const getDexColor = (dex: string | undefined | null) => {
+    if (!dex) return colors[9];
+    return dexColorMap[dex] || getFallbackColor(dex);
+  };
   
   // Debug element dimensions when rendered
   useEffect(() => {
@@ -253,6 +244,7 @@ export default function TvlByDexChart({
       setUniqueDates([]);
       setAggregatedData({});
       setFilteredAggregatedData({});
+      setDexColorMap({});
       return;
     }
     
@@ -260,36 +252,58 @@ export default function TvlByDexChart({
     setData(dataToProcess);
     setFilteredData(dataToProcess);
         
-        // Extract unique DEXes and dates
+    // Extract unique DEXes and dates
     const dexes = Array.from(new Set(dataToProcess.map(item => item.dex))).sort();
     const dates = Array.from(new Set(dataToProcess.map(item => item.date))).sort();
         
-        console.log('[TvlByDexChart] Unique DEXes:', dexes.length);
-        console.log('[TvlByDexChart] Unique dates:', dates.length);
+    console.log('[TvlByDexChart] Unique DEXes:', dexes.length);
+    console.log('[TvlByDexChart] Unique dates:', dates.length);
         
-        setUniqueDexes(dexes);
-        setUniqueDates(dates);
+    setUniqueDexes(dexes);
+    setUniqueDates(dates);
     setFilteredDexes(dexes);
     setFilteredDates(dates);
         
-        // Aggregate data by date and dex for easier chart rendering
-        const aggregated: Record<string, Record<string, number>> = {};
+    // Aggregate data by date and dex for easier chart rendering
+    const aggregated: Record<string, Record<string, number>> = {};
         
-        // Initialize with 0 values for all combinations
-        dates.forEach(date => {
-          aggregated[date] = {};
-          dexes.forEach(dex => {
-            aggregated[date][dex] = 0;
-          });
-        });
+    // Initialize with 0 values for all combinations
+    dates.forEach(date => {
+      aggregated[date] = {};
+      dexes.forEach(dex => {
+        aggregated[date][dex] = 0;
+      });
+    });
         
-        // Fill in actual values
+    // Fill in actual values
     dataToProcess.forEach(item => {
-          aggregated[item.date][item.dex] = item.tvl;
-        });
+      aggregated[item.date][item.dex] = item.tvl;
+    });
         
-        setAggregatedData(aggregated);
+    setAggregatedData(aggregated);
     setFilteredAggregatedData(aggregated);
+    
+    // Calculate total TVL per DEX to sort by value
+    const tvlByDex: Record<string, number> = {};
+    dataToProcess.forEach(item => {
+      tvlByDex[item.dex] = (tvlByDex[item.dex] || 0) + item.tvl;
+    });
+    
+    // Sort DEXes by total TVL (highest first)
+    const sortedDexes = dexes
+      .map(dex => ({ name: dex, tvl: tvlByDex[dex] || 0 }))
+      .sort((a, b) => b.tvl - a.tvl)
+      .map(item => item.name);
+    
+    // Create color map - assign colors based on TVL ranking
+    const newColorMap: Record<string, string> = {};
+    sortedDexes.forEach((dex, index) => {
+      // Use first set of colors from our palette (wrap around if needed)
+      newColorMap[dex] = colors[index % colors.length];
+    });
+    
+    // Set the new color map
+    setDexColorMap(newColorMap);
     
     // Set brush as active but don't set a specific domain
     setIsBrushActive(true);
@@ -328,7 +342,7 @@ export default function TvlByDexChart({
     );
     
     const now = new Date();
-    let cutoffDate = new Date();
+    const cutoffDate = new Date();
     
     switch (filter) {
       case 'W':
@@ -688,7 +702,7 @@ export default function TvlByDexChart({
             <div className="flex items-center gap-1.5">
               <RefreshIcon className="w-3.5 h-3.5" />
               <span>Refresh</span>
-        </div>
+            </div>
           </ButtonSecondary>
         </div>
       );
@@ -706,24 +720,24 @@ export default function TvlByDexChart({
     }
     
     // Prepare aggregated data for the modal if needed
-    let modalAggregated: Record<string, Record<string, number>> = {};
+    const modalAggregatedData: Record<string, Record<string, number>> = {};
     if (isModal) {
       activeDates.forEach(date => {
-        modalAggregated[date] = {};
+        modalAggregatedData[date] = {};
         activeDexes.forEach(dex => {
-          modalAggregated[date][dex] = 0;
+          modalAggregatedData[date][dex] = 0;
         });
       });
       
       activeData.forEach(item => {
-        if (modalAggregated[item.date]) {
-          modalAggregated[item.date][item.dex] = item.tvl;
+        if (modalAggregatedData[item.date]) {
+          modalAggregatedData[item.date][item.dex] = item.tvl;
         }
       });
     }
     
     // Use the appropriate aggregated data
-    const actualAggregatedData = isModal ? modalAggregated : activeAggregatedData;
+    const actualAggregatedData = isModal ? modalAggregatedData : activeAggregatedData;
     
     // Prepare data for BarStack component
     const processedData = activeDates.map(date => {
@@ -778,11 +792,11 @@ export default function TvlByDexChart({
               ? {} // We'll compute this on-the-fly for modal
               : filteredAggregatedData;
             
-            const activeDates = isModal 
+            const activeDatesList = isModal 
               ? [...new Set(currentData.map(item => item.date))].sort()
               : filteredDates;
             
-            if (activeDates.length === 0) return;
+            if (activeDatesList.length === 0) return;
             
             // Calculate the current date based on mouse position
             const margin = { left: 60, right: 20 };
@@ -793,10 +807,10 @@ export default function TvlByDexChart({
             
             // Find the date based on mouse X position
             const dateIndex = Math.min(
-              activeDates.length - 1,
-              Math.max(0, Math.floor((mouseX - margin.left) / (innerWidth / activeDates.length)))
+              activeDatesList.length - 1,
+              Math.max(0, Math.floor((mouseX - margin.left) / (innerWidth / activeDatesList.length)))
             );
-            const currentDate = activeDates[dateIndex];
+            const currentDate = activeDatesList[dateIndex];
             
             // Prepare per-DEX data for the tooltip
             let dateAggregatedData: Record<string, number> = {};
@@ -849,17 +863,17 @@ export default function TvlByDexChart({
                 range: [0, innerWidth]
               });
     
-    // Find max TVL for y-axis scale
-    let maxTvl = 0;
+              // Find max TVL for y-axis scale
+              let maxTvl = 0;
               activeDates.forEach(date => {
-      let totalTvl = 0;
+                let totalTvl = 0;
                 activeDexes.forEach(dex => {
                   totalTvl += actualAggregatedData[date]?.[dex] || 0;
-      });
-      maxTvl = Math.max(maxTvl, totalTvl);
-    });
+                });
+                maxTvl = Math.max(maxTvl, totalTvl);
+              });
     
-    // Ensure maxTvl is not zero to avoid division by zero
+              // Ensure maxTvl is not zero to avoid division by zero
               if (maxTvl === 0) maxTvl = 1;
               
               const yScale = scaleLinear<number>({
@@ -873,7 +887,7 @@ export default function TvlByDexChart({
                 range: activeDexes.map(dex => getDexColor(dex))
               });
               
-    return (
+              return (
                 <svg width={width} height={height} className="overflow-visible">
                   <Group left={margin.left} top={margin.top}>
                     <GridRows 
@@ -995,10 +1009,10 @@ export default function TvlByDexChart({
             }}
             getDate={(d) => d.date}
             getValue={(d) => d.tvl}
-            lineColor="#a78bfa" // purple for TVL
+            lineColor={colors[0]}
             margin={{ top: 5, right: 20, bottom: 10, left: 60 }}
           />
-          </div>
+        </div>
       </div>
     );
   };

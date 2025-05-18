@@ -13,6 +13,7 @@ import ChartTooltip from '../../../shared/ChartTooltip';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayModeFilter';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -36,15 +37,15 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 
 // Colors for medium categories
 const mediumColors: { [key: string]: string } = {
-  "Direct": "#60a5fa", // blue
-  "Aggregator": "#f97316" // orange
+  "Direct": colors[0], // blue (1st color)
+  "Aggregator": colors[1] // orange (4th color)
 };
 
 // Chart colors for styling
 export const dexVolumeChartColors = {
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 // Medium categories
@@ -207,7 +208,7 @@ export default function DexVolumeChart({
       key: medium,
       displayName: medium,
       shape: 'square',
-      color: mediumColors[medium] || '#6b7280'
+      color: mediumColors[medium] || tickLabels
     }));
   };
   
@@ -252,7 +253,7 @@ export default function DexVolumeChart({
               tooltip.items && tooltip.items.length > 0 ? tooltip.items :
               // Otherwise use the single medium/value from original tooltip
               [{
-                color: mediumColors[tooltip.medium] || '#6b7280',
+                color: mediumColors[tooltip.medium] || tickLabels,
                 label: tooltip.medium,
                 value: formatVolume(tooltip.value),
                 shape: 'square'
@@ -300,11 +301,11 @@ export default function DexVolumeChart({
               // Create items for all mediums with non-zero values
               const tooltipItems = mediumCategories
                 .map(medium => ({
-                  color: mediumColors[medium] || '#6b7280',
+                  color: mediumColors[medium] || tickLabels,
                   label: medium,
                   value: formatVolume(Number(dataPoint[medium] || 0)),
                   rawValue: Number(dataPoint[medium] || 0),
-                  shape: "square" as "square"
+                  shape: "square" as const
                 }))
                 .filter(item => item.rawValue > 0) // Only show non-zero values
                 .sort((a, b) => b.rawValue - a.rawValue); // Sort by value, highest first
@@ -363,7 +364,7 @@ export default function DexVolumeChart({
               
               const colorScale = scaleOrdinal<string, string>({
                 domain: mediumCategories,
-                range: mediumCategories.map(cat => mediumColors[cat] || '#6b7280')
+                range: mediumCategories.map(cat => mediumColors[cat] || tickLabels)
               });
               
               // Prepare data for BarStack - convert to percentage if needed

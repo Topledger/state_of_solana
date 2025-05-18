@@ -69,17 +69,92 @@ export const getValueTypeDisplayName = (valueType: string) => {
   }
 };
 
-// Get color for value type based on currency
-export const getValueTypeColor = (valueType: string, currencyType: 'USD' | 'SOL'): string => {
-  if (valueType === 'real_economic_value') {
-    return currencyType === 'USD' 
-      ? economicValueColors.real_economic_value_usd 
-      : economicValueColors.real_economic_value_sol;
-  } else if (valueType === 'total_economic_value') {
-    return currencyType === 'USD' 
-      ? economicValueColors.total_economic_value_usd 
-      : economicValueColors.total_economic_value_sol;
+// Sort economic value types by total value and assign colors
+const getValueBasedColors = (data: EconomicValueChartData[], currencyType: 'USD' | 'SOL') => {
+  if (data.length === 0) return economicValueColors;
+  
+  // Define metrics to consider based on currency
+  const metrics = stackKeys; // ['real_economic_value', 'total_economic_value']
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => {
+      // Get the value for the current currency
+      const value = currencyType === 'USD' 
+        ? d[`${metric}_usd` as keyof typeof d] 
+        : d[`${metric}_sol` as keyof typeof d];
+      return sum + (Number(value) || 0);
+    }, 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors for each currency
+  const availableUsdColors = [
+    '#0EA5E9', // Blue for USD
+    '#8B5CF6', // Darker purple for USD
+  ];
+  
+  const availableSolColors = [
+    '#10B981', // Green for SOL
+    '#9F7AEA', // Purple for SOL
+  ];
+  
+  // Use appropriate color scheme based on currency
+  const availableColors = currencyType === 'USD' ? availableUsdColors : availableSolColors;
+  
+  // Assign colors to metrics based on their value
+  const updatedColors = { ...economicValueColors };
+  
+  sortedMetrics.forEach((metric, index) => {
+    if (currencyType === 'USD') {
+      if (metric === 'real_economic_value') {
+        updatedColors.real_economic_value_usd = availableColors[index % availableColors.length];
+      } else if (metric === 'total_economic_value') {
+        updatedColors.total_economic_value_usd = availableColors[index % availableColors.length];
+      }
+    } else {
+      if (metric === 'real_economic_value') {
+        updatedColors.real_economic_value_sol = availableColors[index % availableColors.length];
+      } else if (metric === 'total_economic_value') {
+        updatedColors.total_economic_value_sol = availableColors[index % availableColors.length];
+      }
+    }
+  });
+  
+  return updatedColors;
+};
+
+// Get color for value type based on currency with dynamic color assignment
+export const getValueTypeColor = (valueType: string, currencyType: 'USD' | 'SOL', data: EconomicValueChartData[] = []): string => {
+  // If we have data, use dynamic color assignment
+  if (data.length > 0) {
+    const dynamicColors = getValueBasedColors(data, currencyType);
+    
+    if (valueType === 'real_economic_value') {
+      return currencyType === 'USD' 
+        ? dynamicColors.real_economic_value_usd 
+        : dynamicColors.real_economic_value_sol;
+    } else if (valueType === 'total_economic_value') {
+      return currencyType === 'USD' 
+        ? dynamicColors.total_economic_value_usd 
+        : dynamicColors.total_economic_value_sol;
+    }
+  } else {
+    // Fall back to original static color assignment 
+    if (valueType === 'real_economic_value') {
+      return currencyType === 'USD' 
+        ? economicValueColors.real_economic_value_usd 
+        : economicValueColors.real_economic_value_sol;
+    } else if (valueType === 'total_economic_value') {
+      return currencyType === 'USD' 
+        ? economicValueColors.total_economic_value_usd 
+        : economicValueColors.total_economic_value_sol;
+    }
   }
+  
   return '#cccccc'; // fallback
 };
 
@@ -241,12 +316,19 @@ export default function EconomicValueChart({
 
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
-    // Use modal data/filters if in modal mode, otherwise use the main data/filters
-    const activeCurrency = isModal ? modalCurrency : currency;
+    // Choose the appropriate data source and currency based on modal state
     const activeData = isModal ? modalChartData : chartData;
+    const activeCurrency = isModal ? modalCurrency : currency;
     const activeLoading = isModal ? modalLoading : loading;
     const activeError = isModal ? modalError : error;
     
+    // Get dynamic colors based on value
+    const dynamicColors = getValueBasedColors(activeData, activeCurrency);
+    
+    // Define the keys based on the selected currency
+    const currencyKeys = stackKeys.map(key => `${key}_${activeCurrency.toLowerCase()}`);
+    
+    // Common rendering logic for both main and modal charts
     // Show loading state
     if (activeLoading) {
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
@@ -271,31 +353,18 @@ export default function EconomicValueChart({
       <div className="flex flex-col h-full">
         {tooltip.visible && tooltip.dataPoint && (
           <ChartTooltip
-            title={`Year: ${tooltip.dataPoint.year}`}
-            items={[
-              {
-                color: getKeyColor('real_economic_value', activeCurrency),
-                label: getValueTypeDisplayName('real_economic_value'),
-                value: formatValue(
-                  activeCurrency === 'USD' 
-                    ? tooltip.dataPoint.real_economic_value_usd 
-                    : tooltip.dataPoint.real_economic_value, 
-                  activeCurrency
-                ),
-                shape: 'square'
-              },
-              {
-                color: getKeyColor('total_economic_value', activeCurrency),
-                label: getValueTypeDisplayName('total_economic_value'),
-                value: formatValue(
-                  activeCurrency === 'USD' 
-                    ? tooltip.dataPoint.total_economic_value_usd 
-                    : tooltip.dataPoint.total_economic_value, 
-                  activeCurrency
-                ),
-                shape: 'square'
-              }
-            ]}
+            title={`Year: ${tooltip.dataPoint?.year || ''}`}
+            items={stackKeys.map(key => {
+              if (!tooltip.dataPoint) return { color: '#ccc', label: '', value: '', shape: 'square' as const };
+              
+              const valueKey = `${key}_${activeCurrency.toLowerCase()}` as keyof typeof tooltip.dataPoint;
+              return {
+                color: getValueTypeColor(key, activeCurrency, activeData),
+                label: getValueTypeDisplayName(key),
+                value: formatValue(Number(tooltip.dataPoint[valueKey]), activeCurrency),
+                shape: 'square' as const
+              };
+            })}
             top={tooltip.top}
             left={tooltip.left}
             isModal={isModal}
@@ -487,12 +556,12 @@ export default function EconomicValueChart({
             <div className="w-[14%] h-full pl-4 flex flex-col justify-start items-start">
               
               {stackKeys.map((key: string) => (
-                <div key={key} className="flex items-center mb-2.5 w-full">
+                <div key={key} className="flex items-center mb-1.5">
                   <div 
-                    className="w-2.5 h-2.5 rounded-sm mr-2" 
-                    style={{ backgroundColor: getKeyColor(key, modalCurrency) }}
+                    className="w-2.5 h-2.5 rounded-sm mr-1.5" 
+                    style={{ backgroundColor: getValueTypeColor(key, modalCurrency, modalChartData) }}
                   ></div>
-                  <span className="text-xs text-gray-300">{getValueTypeDisplayName(key)}</span>
+                  <span className="text-[11px] text-gray-300">{getValueTypeDisplayName(key)}</span>
                 </div>
               ))}
             </div>

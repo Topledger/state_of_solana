@@ -161,7 +161,7 @@ export const stackKeys = ['base_fee', 'priority_fee', 'jito_total_tips', 'vote_f
 // Generate mock data for fees (kept for potential fallback/testing)
 const generateMockData = (timeFilter: TimeFilter, currency: CurrencyType): CostCapacityDataPoint[] => {
   let startDate = new Date();
-  let endDate = new Date();
+  const endDate = new Date();
   let interval: number;
   
   // Adjust date range based on the time filter

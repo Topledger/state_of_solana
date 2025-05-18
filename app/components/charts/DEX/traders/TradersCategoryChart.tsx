@@ -15,6 +15,7 @@ import Modal from '../../../shared/Modal';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import DataTypeFilter, { DataType } from '../../../shared/filters/DataTypeFilter';
 import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayModeFilter';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -36,21 +37,21 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
   );
 };
 
-// Colors for trader categories
+// Colors for trader categories - use first 6 colors from our sequential color system
 const categoryColors: { [key: string]: string } = {
-  "<1k USD ": "#60a5fa", // blue
-  "1k-10k USD": "#34d399", // green
-  "10k-50k USD": "#a78bfa", // purple
-  "50k-500k USD": "#f97316", // orange
-  "500k-2.5M USD": "#f43f5e", // rose
-  ">2.5M USD": "#facc15" // yellow
+  "<1k USD ": colors[0], // blue (1st color)
+  "1k-10k USD": colors[2], // green (3rd color)
+  "10k-50k USD": colors[1], // purple (2nd color)
+  "50k-500k USD": colors[3], // orange (4th color)
+  "500k-2.5M USD": colors[4], // red (5th color)
+  ">2.5M USD": colors[5] // yellow (6th color)
 };
 
 // Chart colors for styling
 export const tradersCategoryChartColors = {
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 interface TradersCategoryChartProps {
@@ -71,6 +72,9 @@ export default function TradersCategoryChart({
   const [signersData, setSignersData] = useState<TradersCategoryChartPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Color mapping state - maps category names to colors based on values
+  const [categoryColorMap, setCategoryColorMap] = useState<Record<string, string>>({});
   
   // Filtering and brushing states
   const [filteredVolumeData, setFilteredVolumeData] = useState<TradersCategoryChartPoint[]>([]);
@@ -108,6 +112,11 @@ export default function TradersCategoryChart({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const modalChartRef = useRef<HTMLDivElement>(null);
   
+  // Get color for a category from the dynamic color map
+  const getCategoryColor = (category: string) => {
+    return categoryColorMap[category] || categoryColors[category] || '#6b7280';
+  };
+  
   // Fetch data from the API
   const fetchData = useCallback(async () => {
     console.log('[TradersCategoryChart] Starting to fetch data');
@@ -137,6 +146,9 @@ export default function TradersCategoryChart({
         // Set brush as active but don't set a specific domain
         setIsBrushActive(true);
         setBrushDomain(null);
+        
+        // Calculate total values per category and create color mapping
+        updateCategoryColorMapping(sortedVolumeData, sortedSignersData, dataType);
       }
     } catch (err) {
       console.error('[TradersCategoryChart] Error fetching data:', err);
@@ -152,7 +164,50 @@ export default function TradersCategoryChart({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dataType]);
+  
+  // Update color mapping when data type changes
+  useEffect(() => {
+    if (volumeData.length > 0 && signersData.length > 0) {
+      updateCategoryColorMapping(volumeData, signersData, dataType);
+    }
+  }, [dataType, volumeData, signersData]);
+  
+  // Function to calculate total values and assign colors
+  const updateCategoryColorMapping = (
+    volumeData: TradersCategoryChartPoint[], 
+    signersData: TradersCategoryChartPoint[],
+    currentDataType: DataType
+  ) => {
+    const relevantData = currentDataType === 'volume' ? volumeData : signersData;
+    
+    // Calculate total values per category
+    const categoryTotals: Record<string, number> = {};
+    
+    traderCategories.forEach(category => {
+      categoryTotals[category] = 0;
+      
+      relevantData.forEach(dataPoint => {
+        categoryTotals[category] += dataPoint[category] || 0;
+      });
+    });
+    
+    // Sort categories by total values (highest first)
+    const sortedCategories = traderCategories
+      .map(category => ({ name: category, total: categoryTotals[category] || 0 }))
+      .sort((a, b) => b.total - a.total)
+      .map(item => item.name);
+      
+    // Create color map - assign colors based on value ranking
+    const newColorMap: Record<string, string> = {};
+    sortedCategories.forEach((category, index) => {
+      // Use first set of colors from our palette (wrap around if needed)
+      newColorMap[category] = colors[index % colors.length];
+    });
+    
+    // Set the new color map
+    setCategoryColorMap(newColorMap);
+  };
   
   // Create a separate fetchData function for modal
   const fetchModalData = useCallback(async () => {
@@ -432,7 +487,7 @@ export default function TradersCategoryChart({
       key: category,
       displayName: category,
       shape: 'square',
-      color: categoryColors[category] || '#6b7280'
+      color: getCategoryColor(category)
     }));
   };
   
@@ -480,7 +535,7 @@ export default function TradersCategoryChart({
               tooltip.items ? tooltip.items :
               // Otherwise use the single category/value from original tooltip
               [{
-                color: categoryColors[tooltip.category] || '#6b7280',
+                color: getCategoryColor(tooltip.category),
                 label: tooltip.category,
                 value: activeDataType === 'volume' ? formatVolume(tooltip.value) : formatLargeNumber(tooltip.value),
                 shape: 'square'
@@ -529,13 +584,13 @@ export default function TradersCategoryChart({
               // Create items for all categories with non-zero values
               const tooltipItems = traderCategories
                 .map(category => ({
-                  color: categoryColors[category] || '#6b7280',
+                  color: getCategoryColor(category),
                   label: category,
                   value: activeDataType === 'volume' 
                     ? formatVolume(dataPoint[category] || 0) 
                     : formatLargeNumber(dataPoint[category] || 0),
                   rawValue: dataPoint[category] || 0,
-                  shape: "square" as "square"
+                  shape: "square" as const
                 }))
                 .filter(item => item.rawValue > 0) // Only show non-zero values
                 .sort((a, b) => b.rawValue - a.rawValue); // Sort by value, highest first
@@ -594,7 +649,7 @@ export default function TradersCategoryChart({
               
               const colorScale = scaleOrdinal<string, string>({
                 domain: traderCategories,
-                range: traderCategories.map(cat => categoryColors[cat] || '#6b7280')
+                range: traderCategories.map(cat => getCategoryColor(cat))
               });
               
               // Prepare data for BarStack - convert to percentage if needed
@@ -786,7 +841,7 @@ export default function TradersCategoryChart({
           <div key={`legend-${index}`} className="flex items-center">
             <div 
               className="w-3 h-3 mr-1 rounded-sm" 
-              style={{ background: categoryColors[category] }}
+              style={{ background: getCategoryColor(category) }}
             ></div>
             <span className="text-xs text-gray-300">{category}</span>
           </div>

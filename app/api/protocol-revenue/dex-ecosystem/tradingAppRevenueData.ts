@@ -54,7 +54,7 @@ export async function fetchTradingAppRevenueData(): Promise<TradingAppRevenueDat
     }
 
     // Extract raw data from API response
-    let rawData: TradingAppRevenueDataPoint[] = data.query_result.data.rows.map((row: any) => ({
+    const rawData: TradingAppRevenueDataPoint[] = data.query_result.data.rows.map((row: any) => ({
       month: row.month,
       platform: row.platform,
       protocol_revenue: parseFloat(row.protocol_revenue) || 0
@@ -73,5 +73,45 @@ export async function fetchTradingAppRevenueData(): Promise<TradingAppRevenueDat
   } catch (error) {
     console.error('Error fetching Trading App revenue data:', error);
     throw new Error('Failed to fetch Trading App revenue data');
+  }
+}
+
+// Prepare TradingApp revenue data as CSV
+export async function prepareTradingAppRevenueCSV(): Promise<string> {
+  try {
+    const data = await fetchTradingAppRevenueData();
+    
+    if (!data || data.length === 0) {
+      console.error('No Trading App revenue data available for CSV export');
+      return '';
+    }
+    
+    // Sort data by platform (alphabetically) and date
+    const sortedData = [...data].sort((a, b) => {
+      // First sort by platform name
+      if (a.platform < b.platform) return -1;
+      if (a.platform > b.platform) return 1;
+      
+      // Then by date
+      return new Date(a.month).getTime() - new Date(b.month).getTime();
+    });
+    
+    // Create CSV header
+    const header = ['block_date', 'Platform', 'protocol_revenue_usd'];
+    
+    // Create CSV rows
+    const rows = sortedData.map(item => {
+      return [
+        item.month,
+        item.platform,
+        item.protocol_revenue.toFixed(2)
+      ].join(',');
+    });
+    
+    // Combine header and rows
+    return [header.join(','), ...rows].join('\n');
+  } catch (error) {
+    console.error('Error preparing Trading App revenue CSV data:', error);
+    return '';
   }
 } 

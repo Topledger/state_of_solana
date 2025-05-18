@@ -13,8 +13,9 @@ import ChartTooltip from '../../../shared/ChartTooltip';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import TimeFilterSelector from '../../../shared/filters/TimeFilter';
-import { tvlVelocityColors } from './TvlVelocityChart';
+
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, getColorByIndex, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -53,25 +54,10 @@ const formatDate = (dateStr: string, timeFilter?: TimeFilter) => {
   }
 };
 
-// Define colors with opacity versions for the chart lines
-const baseColors = [
-  '#60a5fa', // blue
-  '#a78bfa', // purple
-  '#34d399', // green
-  '#f97316', // orange
-  '#f43f5e', // red
-  '#facc15', // yellow
-];
-
-const getColorForProgramType = (programType: string, programTypes: string[]) => {
-  const index = programTypes.indexOf(programType) % baseColors.length;
-  return baseColors[index];
-};
-
-const colors = {
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
-  grid: '#1f2937',
+const chartStyleColors = {
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+  grid: grid,
 };
 
 const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({ 
@@ -88,6 +74,9 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
   const [brushDomain, setBrushDomain] = useState<[Date, Date] | null>(null);
   const [isBrushActive, setIsBrushActive] = useState(false);
   
+  // Color mapping state - maps program types to colors based on velocity
+  const [programTypeColorMap, setProgramTypeColorMap] = useState<Record<string, string>>({});
+  
   // Modal specific data
   const [modalData, setModalData] = useState<VelocityByDexDataPoint[]>([]);
   const [modalProgramTypes, setModalProgramTypes] = useState<string[]>([]);
@@ -97,6 +86,7 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
   const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
   const [isModalBrushActive, setIsModalBrushActive] = useState(false);
   const [modalFilteredData, setModalFilteredData] = useState<VelocityByDexDataPoint[]>([]);
+  const [modalProgramTypeColorMap, setModalProgramTypeColorMap] = useState<Record<string, string>>({});
   
   // Shared tooltip state
   const [tooltip, setTooltip] = useState({ 
@@ -113,6 +103,13 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
   const modalThrottleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const canUpdateModalFilteredDataRef = useRef<boolean>(true);
   
+  // Get color for a program type from the dynamic color map
+  const getColorForProgramType = (programType: string, isModal = false) => {
+    const colorMap = isModal ? modalProgramTypeColorMap : programTypeColorMap;
+    if (!programType) return colors[9]; // Default fallback
+    return colorMap[programType] || getColorByIndex(0); // Fallback to first color if not in map
+  };
+  
   // Create a fetchData function that can be called to refresh data for main chart
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -125,6 +122,29 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
         console.log('Sample data:', chartData.slice(0, 2));
         const types = getUniqueProgramTypes(chartData);
         console.log(`Program types: ${types.join(', ')}`);
+        
+        // Calculate total velocity per program type to sort by value
+        const velocityByType: Record<string, number> = {};
+        chartData.forEach(item => {
+          velocityByType[item.program_type] = (velocityByType[item.program_type] || 0) + item.velocity;
+        });
+        
+        // Sort program types by total velocity (highest first)
+        const sortedTypes = types
+          .map(type => ({ name: type, velocity: velocityByType[type] || 0 }))
+          .sort((a, b) => b.velocity - a.velocity)
+          .map(item => item.name);
+        
+        // Create color map - assign colors based on velocity ranking
+        const newColorMap: Record<string, string> = {};
+        sortedTypes.forEach((type, index) => {
+          // Use first set of colors from our palette (wrap around if needed)
+          newColorMap[type] = colors[index % colors.length];
+        });
+        
+        // Set the new color map
+        setProgramTypeColorMap(newColorMap);
+        setProgramTypes(sortedTypes);
       }
       
       if (chartData.length === 0) {
@@ -134,7 +154,6 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
       } else {
         setData(chartData);
         setFilteredData(chartData);
-        setProgramTypes(getUniqueProgramTypes(chartData));
         
         // Set brush as active but don't set a specific domain
         // This will result in the full range being selected
@@ -168,9 +187,33 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
         setModalFilteredData([]);
         setModalProgramTypes([]);
       } else {
+        // Get unique program types
+        const types = getUniqueProgramTypes(chartData);
+        
+        // Calculate total velocity per program type to sort by value
+        const velocityByType: Record<string, number> = {};
+        chartData.forEach(item => {
+          velocityByType[item.program_type] = (velocityByType[item.program_type] || 0) + item.velocity;
+        });
+        
+        // Sort program types by total velocity (highest first)
+        const sortedTypes = types
+          .map(type => ({ name: type, velocity: velocityByType[type] || 0 }))
+          .sort((a, b) => b.velocity - a.velocity)
+          .map(item => item.name);
+        
+        // Create color map - assign colors based on velocity ranking
+        const newColorMap: Record<string, string> = {};
+        sortedTypes.forEach((type, index) => {
+          // Use first set of colors from our palette (wrap around if needed)
+          newColorMap[type] = colors[index % colors.length];
+        });
+        
+        // Set the new color map and data
+        setModalProgramTypeColorMap(newColorMap);
+        setModalProgramTypes(sortedTypes);
         setModalData(chartData);
         setModalFilteredData(chartData);
-        setModalProgramTypes(getUniqueProgramTypes(chartData));
         
         // Set brush as active but don't set a specific domain
         // This will result in the full range being selected
@@ -503,6 +546,33 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
     };
   }, []);
 
+  // Process data for brush component
+  const processDataForBrush = useCallback((chartData: VelocityByDexDataPoint[]): {date: string; value: number}[] => {
+    if (!chartData || chartData.length === 0) {
+      return [];
+    }
+    
+    // Get unique dates and program types
+    const uniqueDates = [...new Set(chartData.map(d => d.date))].sort();
+    const programTypeSet = new Set<string>();
+    chartData.forEach(d => programTypeSet.add(d.program_type));
+    const programTypes = Array.from(programTypeSet);
+    
+    // Create a map of date -> sum of all velocities
+    const brushData = uniqueDates.map(date => {
+      // Sum up all program type velocities for this date
+      const datePoints = chartData.filter(d => d.date === date);
+      const totalVelocity = datePoints.reduce((sum, point) => sum + point.velocity, 0);
+      
+      return {
+        date,
+        value: totalVelocity
+      };
+    });
+    
+    return brushData;
+  }, []);
+
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
     // Use modalTimeFilter and modalData if in modal mode, otherwise use the main timeFilter and data
@@ -545,7 +615,7 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
           <ChartTooltip
             title={formatDate(tooltip.date, activeTimeFilter)}
             items={tooltip.velocities.map(v => ({
-              color: getColorForProgramType(v.programType, activeProgramTypes),
+              color: getColorForProgramType(v.programType, isModal),
               label: v.programType,
               value: formatVelocity(v.velocity),
               shape: 'circle'
@@ -622,13 +692,13 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
               // Create color scale for program types
               const colorScale = scaleOrdinal<string>({
                 domain: activeProgramTypes,
-                range: baseColors,
+                range: activeProgramTypes.map(type => getColorForProgramType(type, isModal)),
               });
               
               return (
                 <svg width={width} height={height} className="overflow-visible">
                   <Group left={margin.left} top={margin.top}>
-                    <GridRows scale={velocityScale} width={innerWidth} stroke={colors.grid} strokeDasharray="2,3" strokeOpacity={0.5} numTicks={5} />
+                    <GridRows scale={velocityScale} width={innerWidth} stroke={chartStyleColors.grid} strokeDasharray="2,3" strokeOpacity={0.5} numTicks={5} />
                     
                     {/* Render line for each program type */}
                     {activeProgramTypes.map((programType) => {
@@ -653,7 +723,7 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
                           data={lineData}
                           x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                           y={(d) => velocityScale(d.velocity)}
-                          stroke={getColorForProgramType(programType, activeProgramTypes)}
+                          stroke={getColorForProgramType(programType, isModal)}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -672,10 +742,10 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
                           default: return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                         }
                       }}
-                      stroke={colors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0}
+                      stroke={chartStyleColors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0}
                       hideZero={true}
                       tickLabelProps={(value, index) => ({ 
-                        fill: colors.tickLabels, 
+                        fill: chartStyleColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -685,10 +755,10 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
                       })}
                       numTicks={Math.min(5, uniqueDates.length)} />
                     
-                    <AxisLeft scale={velocityScale} stroke={colors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0} numTicks={5}
+                    <AxisLeft scale={velocityScale} stroke={chartStyleColors.axisLines} strokeWidth={0.5} tickStroke="transparent" tickLength={0} numTicks={5}
                       tickFormat={(value) => formatVelocity(Number(value))}
                       tickLabelProps={() => ({ 
-                        fill: colors.tickLabels, 
+                        fill: chartStyleColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -706,19 +776,22 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
         {/* Brush component - now shown for both main chart and modal */}
         <div className="h-[15%] w-full mt-1">
           <BrushTimeScale
-            data={isModal ? modalData : data}
+            data={processDataForBrush(isModal ? modalData : data)}
             isModal={isModal}
-            activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
-            onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
-            onClearBrush={isModal 
-              ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
-              : () => { setBrushDomain(null); setIsBrushActive(false); }
-            }
+            activeBrushDomain={activeBrushDomain}
+            onBrushChange={activeHandleBrushChange}
+            onClearBrush={activeClearBrush}
             getDate={(d) => d.date}
-            getValue={(d) => d.velocity}
-            getUniqueDates={getUniqueDates}
-            lineColor={tvlVelocityColors.tvlBar}
-            margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
+            getValue={(d) => {
+              let sum = 0;
+              const relevantPrograms = isModal ? modalProgramTypes : programTypes;
+              relevantPrograms.forEach(program => {
+                sum += d[program] || 0;
+              });
+              return sum;
+            }}
+            lineColor={colors[0]}
+            margin={{ top: 5, right: 40, bottom: 10, left: 40 }}
           />
         </div>
       </div>
@@ -756,7 +829,7 @@ const VelocityByDexChart: React.FC<VelocityByDexChartProps> = ({
                   {modalProgramTypes.length > 0 && modalProgramTypes.map((programType, index) => (
                     <div key={programType} className="flex items-start">
                       <div className="w-2.5 h-2.5 mr-2 rounded-sm mt-0.5" 
-                          style={{ background: getColorForProgramType(programType, modalProgramTypes) }}></div>
+                          style={{ background: getColorForProgramType(programType, true) }}></div>
                       <span className="text-[11px] text-gray-300 truncate" title={programType}>
                         {programType.length > 10 ? `${programType.substring(0, 10)}...` : programType}
                       </span>

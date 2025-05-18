@@ -13,23 +13,17 @@ import { getLatestTvlStats } from "../../api/dex/summary/tvlData";
 import { getLatestTradersStats } from "../../api/dex/summary/tradersData";
 import ChartCard from "../../components/shared/ChartCard";
 import LegendItem from "../../components/shared/LegendItem";
+import { getColorByIndex, allColors } from "../../utils/chartColors";
 
-// Define colors for program types (same as in VelocityByDexChart)
-const baseColors = [
-  '#60a5fa', // blue
-  '#a78bfa', // purple
-  '#34d399', // green
-  '#f97316', // orange
-  '#f43f5e', // red
-  '#facc15', // yellow
-];
+// Use the standardized color palette for consistent coloring
+const baseColors = allColors;
 
 // Get TVL and Velocity colors from the chart component
 const tvlVelocityColors = getTvlVelocityChartColors();
 
 const getColorForProgramType = (programType: string, programTypes: string[]) => {
-  const index = programTypes.indexOf(programType) % baseColors.length;
-  return baseColors[index];
+  const index = programTypes.indexOf(programType);
+  return getColorByIndex(index);
 };
 
 // Function to get available metrics from TVL velocity data

@@ -11,7 +11,7 @@ import { localPoint } from '@visx/event';
 import Loader from "@/app/components/shared/Loader";
 import ButtonSecondary from "@/app/components/shared/buttons/ButtonSecondary";
 import ChartTooltip from "@/app/components/shared/ChartTooltip";
-import Modal from "@/app/components/shared/Modal";
+import Modal, { ScrollableLegend } from "@/app/components/shared/Modal";
 import LegendItem from "@/app/components/shared/LegendItem";
 import BrushTimeScale from "@/app/components/shared/BrushTimeScale";
 
@@ -72,6 +72,20 @@ interface TopProtocolsRevenueChartProps {
 interface ExtendedPlatformRevenueDataPoint extends PlatformRevenueDataPoint {
   date?: Date;
 }
+
+// Format currency values more concisely (no decimal places for millions)
+const formatRevenueValue = (value: number): string => {
+  if (value >= 1e9) {
+    return `$${Math.round(value / 1e9)}B`;
+  }
+  if (value >= 1e6) {
+    return `$${Math.round(value / 1e6)}M`;
+  }
+  if (value >= 1e3) {
+    return `$${Math.round(value / 1e3)}K`;
+  }
+  return `$${Math.round(value)}`;
+};
 
 // Main chart component
 const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({ 
@@ -258,7 +272,7 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
     if (currentData.length === 0) return;
     
     // Calculate available chart space
-    const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+    const margin = { top: 10, right: 15, bottom: 30, left: 45 };
     const innerWidth = rect.width - margin.left - margin.right;
     
     // Calculate bar width
@@ -336,7 +350,7 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
               {
                 color: getPlatformColor(tooltip.dataPoint.platform),
                 label: 'Protocol Revenue',
-                value: formatCurrency(tooltip.dataPoint.protocol_revenue),
+                value: formatRevenueValue(tooltip.dataPoint.protocol_revenue),
                 shape: 'square'
               }
             ]}
@@ -356,7 +370,7 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
             {({ width, height }) => {
               if (width <= 0 || height <= 0) return null;
               
-              const margin = { top: 10, right: 45, bottom: 30, left: 60 };
+              const margin = { top: 10, right: 15, bottom: 30, left: 45 };
               const innerWidth = width - margin.left - margin.right;
               const innerHeight = height - margin.top - margin.bottom;
               if (innerWidth <= 0 || innerHeight <= 0) return null;
@@ -430,7 +444,11 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
                       tickFormat={(platform) => {
                         // Truncate long platform names
                         const name = platform as string;
-                        return name.length > 8 ? `${name.substring(0, 8)}...` : name;
+                        // In main view, show only 3 letters with ellipsis
+                        // In modal view, show up to 8 letters (as was done previously)
+                        return isModal 
+                          ? (name.length > 12 ? `${name.substring(0, 12)}...` : name)
+                          : (name.length > 3 ? `${name.substring(0, 3)}...` : name);
                       }}
                     />
                     
@@ -443,7 +461,7 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
                       tickLength={0}
                       hideZero={true}
                       numTicks={5}
-                      tickFormat={(value) => formatCurrency(value as number)}
+                      tickFormat={(value) => formatRevenueValue(value as number)}
                       tickLabelProps={() => ({
                         fill: '#6b7280',
                         fontSize: 11,
@@ -463,33 +481,25 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
         
         {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
-          <ParentSize>
-            {({ width, height }) => {
-              if (width <= 0 || height <= 0) return null;
-              
-              return (
-                <BrushTimeScale
-                  data={activeData}
-                  isModal={isModal}
-                  activeBrushDomain={activeBrushDomain}
-                  onBrushChange={activeHandleBrushChange}
-                  onClearBrush={() => {
-                    if (isModal) {
-                      setModalBrushDomain(null);
-                      setIsModalBrushActive(false);
-                    } else {
-                      setBrushDomain(null);
-                      setIsBrushActive(false);
-                    }
-                  }}
-                  getDate={(d) => d.date ? d.date.toISOString() : ''}
-                  getValue={(d) => d.protocol_revenue}
-                  lineColor={platformColors.Photon}
-                  margin={{ top: 5, right: 45, bottom: 10, left: 60 }}
-                />
-              );
+          <BrushTimeScale
+            data={activeData}
+            isModal={isModal}
+            activeBrushDomain={activeBrushDomain}
+            onBrushChange={activeHandleBrushChange}
+            onClearBrush={() => {
+              if (isModal) {
+                setModalBrushDomain(null);
+                setIsModalBrushActive(false);
+              } else {
+                setBrushDomain(null);
+                setIsBrushActive(false);
+              }
             }}
-          </ParentSize>
+            getDate={(d) => d.date ? d.date.toISOString() : ''}
+            getValue={(d) => d.protocol_revenue}
+            lineColor={platformColors.Photon}
+            margin={{ top: 5, right: 15, bottom: 10, left: 45 }}
+          />
         </div>
       </div>
     );
@@ -516,7 +526,7 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
             
             {/* Legend area - 10% width */}
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-              <div className="text-[10px] text-gray-400 mb-2">PLATFORMS</div>
+              
               {loading ? (
                 // Show loading state
                 <>
@@ -525,25 +535,17 @@ const TopProtocolsRevenueChart: React.FC<TopProtocolsRevenueChartProps> = ({
                   <LegendItem label="Loading..." color="#34d399" isLoading={true} />
                 </>
               ) : (
-                // Create legend items array
-                <div className="flex flex-col gap-1 overflow-y-auto max-h-[500px] pr-1">
-                  {data.slice(0, 10).map((item) => (
-                    <LegendItem
-                      key={item.platform}
-                      label={item.platform}
-                      color={getPlatformColor(item.platform)}
-                      shape="square"
-                      tooltipText={formatCurrency(item.protocol_revenue)}
-                    />
-                  ))}
-                  {data.length > 10 && (
-                    <LegendItem
-                      label="Others"
-                      color="#888888"
-                      shape="square"
-                    />
-                  )}
-                </div>
+                <ScrollableLegend
+                  
+                  items={data.map(item => ({
+                    id: item.platform,
+                    label: item.platform,
+                    color: getPlatformColor(item.platform),
+                    
+                  }))}
+                  maxHeight={600}
+                  maxItems={28}
+                />
               )}
             </div>
           </div>

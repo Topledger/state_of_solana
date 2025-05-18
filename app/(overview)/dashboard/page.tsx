@@ -8,6 +8,9 @@ import dynamic from "next/dynamic";
 import { cohortColors, cohortOrder } from "@/app/api/overview/user-activity/txnsCohortData";
 import { balanceCohortColors, balanceCohortOrder } from "@/app/api/overview/user-activity/walletBalanceData";
 import { solChangeCohortColors, solChangeCohortOrder } from "@/app/api/overview/user-activity/solChangeData";
+// Import DashboardRenderer - use this component to render charts from the chart creator
+// Example usage: <DashboardRenderer pageId="dashboard" />
+import DashboardRenderer from "@/app/admin/components/dashboard-renderer";
 
 // Dynamically import chart components with no SSR
 const UserActivityChart = dynamic(
@@ -422,6 +425,8 @@ export default function DashboardPage() {
           />
         </div>
       </ChartCard>
+      {/* dynamic charts from admin section */}
+      <DashboardRenderer pageId="dashboard" />
     </div>
   );
 } 

@@ -3,14 +3,20 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  output: 'export',
-  basePath: process.env.NODE_ENV === 'production' ? '/state_of_solana' : '',
-  images: {
-    unoptimized: true,
-  },
-  trailingSlash: true,
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/state_of_solana' : '',
-  distDir: 'out',
+  // Only use static export in production
+  ...(process.env.NODE_ENV === 'production' ? {
+    output: 'export',
+    distDir: 'out',
+    basePath: '/state_of_solana',
+    assetPrefix: '/state_of_solana',
+    images: {
+      unoptimized: true,
+    },
+    trailingSlash: true,
+  } : {
+    // Use standard server mode in development
+    distDir: '.next',
+  }),
   reactStrictMode: false,
 };
 

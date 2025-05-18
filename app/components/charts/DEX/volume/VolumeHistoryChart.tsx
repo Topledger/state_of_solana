@@ -12,6 +12,7 @@ import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import TimeFilterSelector from '../../../shared/filters/TimeFilter';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -35,10 +36,10 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 
 // Chart colors for volume history
 export const volumeHistoryColors = {
-  volumeBar: '#60a5fa', // blue
-  grid: '#374151',
-  axisLines: '#374151',
-  tickLabels: '#9ca3af',
+  volumeBar: colors[0],
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 // Export a function to get chart colors for external use
@@ -517,8 +518,8 @@ return (
                         fontWeight: 300, 
                         letterSpacing: '0.05em',
                         textAnchor: 'end', 
-                        dx: '-0.6em', 
-                        dy: '0.25em' 
+                        dx: '1em', 
+                        dy: '0.5em' 
                   })}
                 />
               </Group>

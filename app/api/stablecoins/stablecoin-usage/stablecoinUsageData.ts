@@ -66,7 +66,7 @@ export async function fetchStablecoinUsageData(): Promise<StablecoinUsageDataPoi
       throw new Error('Invalid data structure received from API');
     }
     
-    let rawData: StablecoinUsageDataPoint[] = data.query_result.data.rows.map((row: any) => ({
+    const rawData: StablecoinUsageDataPoint[] = data.query_result.data.rows.map((row: any) => ({
       block_date: row.block_date,
       mint: row.mint,
       holders: parseInt(row.holders) || 0,

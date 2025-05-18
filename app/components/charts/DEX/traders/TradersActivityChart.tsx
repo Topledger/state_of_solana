@@ -15,6 +15,7 @@ import ChartTooltip from '../../../shared/ChartTooltip';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import { curveMonotoneX } from '@visx/curve';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -38,12 +39,12 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 
 // Chart colors for consistent styling
 export const tradersActivityChartColors = {
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
-  activeTraders: '#60a5fa', // blue for bar chart
-  newTraders: '#f97316', // orange for new traders line
-  activationRatio: '#34d399', // green for activation ratio line
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+  activeTraders: colors[0], // Default color for active traders
+  newTraders: colors[1],    // Default color for new traders
+  activationRatio: colors[2], // Default color for activation ratio
 };
 
 // Export a function to get chart colors for external use
@@ -78,6 +79,13 @@ export default function TradersActivityChart({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Color mapping state for metrics
+  const [metricColors, setMetricColors] = useState({
+    activeTraders: colors[0],
+    newTraders: colors[1],
+    activationRatio: colors[2]
+  });
+  
   // Filtering and brushing states
   const [filteredData, setFilteredData] = useState<TradersDataPoint[]>([]);
   const [brushDomain, setBrushDomain] = useState<[Date, Date] | null>(null);
@@ -109,6 +117,46 @@ export default function TradersActivityChart({
   const modalThrottleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const canUpdateModalFilteredDataRef = useRef<boolean>(true);
   
+  // Determine colors based on metric values
+  const updateMetricColors = (chartData: TradersDataPoint[]) => {
+    if (!chartData || chartData.length === 0) return;
+    
+    // Calculate total values for each metric
+    let totalActiveTraders = 0;
+    let totalNewTraders = 0;
+    let totalActivationRatio = 0;
+    
+    chartData.forEach(point => {
+      totalActiveTraders += point.active_signer;
+      totalNewTraders += point.new_signer;
+      totalActivationRatio += point.new_traders_activation_ratio;
+    });
+    
+    // Create an array of metrics with their totals
+    const metricsWithTotals = [
+      { name: 'activeTraders', total: totalActiveTraders },
+      { name: 'newTraders', total: totalNewTraders },
+      { name: 'activationRatio', total: totalActivationRatio }
+    ];
+    
+    // Sort by total values (highest first)
+    const sortedMetrics = [...metricsWithTotals].sort((a, b) => b.total - a.total);
+    
+    // Assign colors based on rank
+    const newColors = {
+      activeTraders: colors[0],
+      newTraders: colors[1],
+      activationRatio: colors[2]
+    };
+    
+    sortedMetrics.forEach((metric, index) => {
+      newColors[metric.name as keyof typeof newColors] = colors[index];
+    });
+    
+    // Update colors state
+    setMetricColors(newColors);
+  };
+  
   // Fetch data from the API with enhanced loading states
   const fetchData = useCallback(async () => {
     console.log('[TradersActivityChart] Starting to fetch data');
@@ -130,6 +178,9 @@ export default function TradersActivityChart({
         // Set brush as active but don't set a specific domain
         setIsBrushActive(true);
         setBrushDomain(null);
+        
+        // Update colors based on metric values
+        updateMetricColors(fetchedData);
       }
     } catch (err) {
       console.error('[TradersActivityChart] Error fetching data:', err);
@@ -166,6 +217,9 @@ export default function TradersActivityChart({
         // Set brush as active but don't set a specific domain
         setIsModalBrushActive(true);
         setModalBrushDomain(null);
+        
+        // Update colors based on metric values
+        updateMetricColors(fetchedData);
       }
     } catch (err) {
       console.error('[TradersActivityChart] Error fetching modal data:', err);
@@ -462,19 +516,19 @@ export default function TradersActivityChart({
         key: 'active_signer',
         displayName: 'Active Traders',
         shape: 'square',
-        color: tradersActivityChartColors.activeTraders
+        color: metricColors.activeTraders
       },
       {
         key: 'new_signer',
         displayName: 'New Traders',
         shape: 'circle',
-        color: tradersActivityChartColors.newTraders
+        color: metricColors.newTraders
       },
       {
         key: 'new_traders_activation_ratio',
         displayName: 'Activation Ratio',
         shape: 'circle',
-        color: tradersActivityChartColors.activationRatio
+        color: metricColors.activationRatio
       }
     ];
   };
@@ -525,19 +579,19 @@ export default function TradersActivityChart({
             title={formatTraderDate(tooltip.dataPoint.date)}
             items={[
               { 
-                color: tradersActivityChartColors.activeTraders,
+                color: metricColors.activeTraders,
                 label: 'Active Traders',
                 value: formatActiveTraders(tooltip.dataPoint.active_signer),
                 shape: 'square'
               },
               {
-                color: tradersActivityChartColors.newTraders,
+                color: metricColors.newTraders,
                 label: 'New Traders',
                 value: formatNewTraders(tooltip.dataPoint.new_signer),
                 shape: 'circle'
               },
               {
-                color: tradersActivityChartColors.activationRatio,
+                color: metricColors.activationRatio,
                 label: 'Activation Ratio',
                 value: formatRatio(tooltip.dataPoint.new_traders_activation_ratio),
                 shape: 'circle'
@@ -621,7 +675,7 @@ export default function TradersActivityChart({
                           y={innerHeight - barHeight}
                           width={barWidth}
                           height={barHeight}
-                          fill={tradersActivityChartColors.activeTraders}
+                          fill={metricColors.activeTraders}
                           opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7}
                           rx={2}
                         />
@@ -633,7 +687,7 @@ export default function TradersActivityChart({
                       data={sortedData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => yScale(d.new_signer)}
-                      stroke={tradersActivityChartColors.newTraders}
+                      stroke={metricColors.newTraders}
                       strokeWidth={1.5}
                       curve={curveMonotoneX}
                     />
@@ -643,7 +697,7 @@ export default function TradersActivityChart({
                       data={sortedData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => yRatioScale(d.new_traders_activation_ratio)}
-                      stroke={tradersActivityChartColors.activationRatio}
+                      stroke={metricColors.activationRatio}
                       strokeWidth={1.5}
                       curve={curveMonotoneX}
                     />
@@ -730,7 +784,7 @@ export default function TradersActivityChart({
             onClearBrush={activeClearBrush}
             getDate={(d) => d.date}
             getValue={(d) => d.active_signer}
-            lineColor={tradersActivityChartColors.activeTraders}
+            lineColor={metricColors.activeTraders}
             margin={{ top: 5, right: 60, bottom: 10, left: 60 }}
           />
         </div>

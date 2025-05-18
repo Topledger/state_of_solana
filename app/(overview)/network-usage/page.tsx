@@ -4,6 +4,8 @@ import ChartCard from "../../components/shared/ChartCard";
 import LegendItem from "../../components/shared/LegendItem";
 import TimeFilterSelector from "../../components/shared/filters/TimeFilter";
 import dynamic from "next/dynamic";
+// Import DashboardRenderer to display user-created charts
+import DashboardRenderer from "@/app/admin/components/dashboard-renderer";
 
 // Dynamically import chart components with no SSR
 const TxnFeesChart = dynamic(
@@ -327,6 +329,13 @@ export default function NetworkUsagePage() {
           />
         
       </ChartCard>
+      
+      {/* User-created charts from the chart creator */}
+      <div className="mt-10 border-t pt-8 border-gray-100">
+        <h2 className="text-xl font-semibold mb-4">Additional Network Insights</h2>
+        <p className="text-gray-500 mb-6">Charts created in the Chart Creator for Network Usage</p>
+        <DashboardRenderer pageId="network-usage" />
+      </div>
     </div>
   );
 } 

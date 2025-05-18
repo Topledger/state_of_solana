@@ -1,13 +1,14 @@
 import { TimeFilter } from './chartData';
+import { colors } from '@/app/utils/chartColors';
 
 // Re-export TimeFilter to be used by components
 export type { TimeFilter };
 
 // Define platform revenue data point structure
 export interface PlatformRevenueDataPoint {
+  block_date: string;
   platform: string;
-  revenue_usd: number;
-  percentage: number;
+  protocol_revenue_usd: number;
 }
 
 // Define API response structure
@@ -15,7 +16,6 @@ interface ApiResponse {
   query_result?: {
     data?: {
       rows?: any[];
-      columns?: { name: string; friendly_name: string; type: string }[];
     };
   };
 }
@@ -23,78 +23,23 @@ interface ApiResponse {
 // Function to fetch platform revenue data
 export const fetchPlatformRevenueData = async (timeFilter: TimeFilter): Promise<PlatformRevenueDataPoint[]> => {
   try {
-    // Set up the request options
     const apiUrl = "https://analytics.topledger.xyz/solana/api/queries/12589/results?api_key=oiGI7qFLlC7o3etCqCywaqnYbY2Z2bGFxOOKdJwO";
-    const datePartMapping: Record<TimeFilter, string> = {
-      'D': 'D',
-      'W': 'W',
-      'M': 'M',
-      'Q': 'Q',
-      'Y': 'Y'
-    };
-    
-    const requestOptions = {
+    const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        parameters: {
-          "Date Part": datePartMapping[timeFilter]
-        }
-      })
-    };
-    
-    // Fetch data
-    const response = await fetch(apiUrl, requestOptions);
-    
-    if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}`);
-    }
-    
-    const data: ApiResponse = await response.json();
-    
-    // Check if we have data
-    if (!data.query_result || !data.query_result.data || !data.query_result.data.rows) {
-      throw new Error('Invalid data structure in API response');
-    }
-    
-    // Log the first row to see the structure
-    if (data.query_result.data.rows.length > 0) {
-      console.log("First row sample:", data.query_result.data.rows[0]);
-    }
-    
-    // Normalize platform names (some might be lowercase)
-    const normalizeData = data.query_result.data.rows.map(row => ({
-      block_date: row.block_date,
-      platform: normalizePlatformName(row.platform),
-      protocol_revenue_usd: typeof row.protocol_revenue_usd === 'number' ? 
-        row.protocol_revenue_usd : parseFloat(row.protocol_revenue_usd || '0')
-    }));
-    
-    // Aggregate by platform (summing revenue across all dates)
-    const platformMap = new Map<string, number>();
-    let totalRevenue = 0;
-    
-    normalizeData.forEach(item => {
-      const currentValue = platformMap.get(item.platform) || 0;
-      const newValue = currentValue + item.protocol_revenue_usd;
-      platformMap.set(item.platform, newValue);
-      totalRevenue += item.protocol_revenue_usd;
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parameters: { "Date Part": timeFilter } })
     });
     
-    // Convert to array and calculate percentages
-    const platformData: PlatformRevenueDataPoint[] = Array.from(platformMap.entries())
-      .map(([platform, revenue_usd]) => ({
-        platform,
-        revenue_usd,
-        percentage: (revenue_usd / totalRevenue) * 100
-      }));
+    if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
     
-    // Sort data by revenue (descending)
-    const sortedData = platformData.sort((a, b) => b.revenue_usd - a.revenue_usd);
+    const data: ApiResponse = await response.json();
+    if (!data.query_result?.data?.rows) return [];
     
-    return sortedData;
+    return data.query_result.data.rows.map((row: any) => ({
+      block_date: row.block_date,
+      platform: normalizePlatformName(row.Platform || row.platform),
+      protocol_revenue_usd: parseFloat(row.protocol_revenue_usd || 0)
+    }));
   } catch (error) {
     console.error('Error fetching platform revenue data:', error);
     throw error;
@@ -104,29 +49,6 @@ export const fetchPlatformRevenueData = async (timeFilter: TimeFilter): Promise<
 // Helper function to normalize platform names
 export function normalizePlatformName(name: string): string {
   if (!name) return 'Unknown';
-  
-  // Handle specific platform name normalizations
-  const nameMapping: Record<string, string> = {
-    'magiceden': 'Magic Eden',
-    'tensorswap': 'Tensor',
-    'looter': 'Looter',
-    'jito': 'Jito',
-    'metaplex': 'Metaplex',
-    'raydium': 'Raydium',
-    'orca': 'Orca',
-    'phantom': 'Phantom',
-    'bloxroute': 'Bloxroute',
-    'pump fun': 'Pump Fun',
-    'photon': 'Photon',
-    'lifinity': 'Lifinity'
-  };
-  
-  // First check if we have an exact match in our mapping
-  if (nameMapping[name.toLowerCase()]) {
-    return nameMapping[name.toLowerCase()];
-  }
-  
-  // Otherwise capitalize first letter of each word
   return name.split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
@@ -134,46 +56,143 @@ export function normalizePlatformName(name: string): string {
 
 // Format functions
 export const formatCurrency = (value: number): string => {
-  if (value >= 1_000_000_000) {
-    return `$${(value / 1_000_000_000).toFixed(1)}B`;
-  } else if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(1)}M`;
-  } else if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  } else {
-    return `$${value.toFixed(2)}`;
-  }
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `$${(value / 1e3).toFixed(1)}K`;
+  return `$${value.toFixed(0)}`;
 };
 
 export const formatPercentage = (value: number): string => {
   return `${value.toFixed(1)}%`;
 };
 
-// Define chart colors for platforms (will use consistent colors for platforms)
-export const platformColors: { [key: string]: string } = {
-  'Magic Eden': '#f97316', // orange
-  'Jupiter': '#60a5fa', // blue
-  'Metaplex': '#a78bfa', // purple
-  'Raydium': '#34d399', // green
-  'Orca': '#fb7185', // pink
-  'Phantom': '#fbbf24', // yellow
-  'Marinade Finance': '#94a3b8', // slate
-  'Tensor': '#ec4899', // pink
-  'Lifinity': '#38bdf8', // sky
-  'Pump Fun': '#a3e635', // lime
-  'Drift': '#8b5cf6', // violet
-  'Mango Markets': '#f43f5e', // rose
-  'Zeta Markets': '#64748b', // slate
-  'Jito': '#60a5fa', // blue
-  'Photon': '#d946ef', // fuchsia
-  'Bloxroute': '#ec4899', // pink
-  'Trojan': '#f97316', // orange
-  'BullX': '#f59e0b', // amber
-  // Fallback color for any other platforms
-  'default': '#9ca3af' // gray
+// Platform-specific colors mapping
+export const platformColors: Record<string, string> = {
+  // Use a distinct color for each platform
+  'Phantom': colors[0], // blue
+  'Pump fun': colors[1], // purple
+  'Radium': colors[2], // green
+  'Pump.Fun AMM': colors[3], // orange
+  'Photon': colors[1], // red
+  'Axiom': colors[5], // yellow
+  'BullX': colors[6], // teal
+  'Orca': colors[7], // dark purple
+  'Trojan': colors[8], // pink
+  'GMGN': colors[9], // gray
+  'Jito': colors[10], // blue (darker)
+  'Metaplex': colors[11], // green (darker)
+  'Other': colors[12], // blue (lighter)
+  'Magiceden': colors[13], // purple (lighter)
+  'Bloxroute': colors[14], // orange (lighter)
+  'Tensorswap': colors[15], // red (lighter)
+  'Helio': colors[16], // yellow (lighter)
+  'Banana Gun': colors[17], // slate
+  'Sol Trading Bot': colors[18], // sky blue
+  'DexScreener': colors[19], // indigo
+  'Lifinity': colors[20], // violet
+  'Bloom trading bot': colors[21], // violet (darker)
+  'Gmgn': colors[9], // gray (same as GMGN, case variant)
+  'Raydium': colors[2], // green (same as Radium, case variant)
+  'Dexscreener': colors[19], // indigo (same as DexScreener, case variant)
+  
+  // Add more platforms with new colors
+  'MEW': colors[22], // rose (darker)
+  'Jupiter': colors[23], // cyan
+  'Drift': colors[24], // orange (darker)
+  
+  // If we run out of colors from the main array, we'll use combinations
+  'LFG': '#38bdf8', // sky blue (custom)
+  'Kamino': '#fb7185', // light pink (custom)
+  'Marginfi': '#84cc16', // lime (custom)
+  'Tensor': '#9333ea', // purple (custom)
 };
 
 // Function to get color for a platform
 export const getPlatformColor = (platform: string): string => {
-  return platformColors[platform] || platformColors['default'];
+  // Handle direct overrides for critical platforms
+  if (platform.toLowerCase() === 'phantom') {
+    return colors[0]; // Force blue for Phantom regardless of case
+  }
+  
+  // Try to get the color for the exact platform name
+  if (platformColors[platform]) {
+    return platformColors[platform];
+  }
+  
+  // Try case-insensitive matching
+  const lowerCasePlatform = platform.toLowerCase();
+  const platformKey = Object.keys(platformColors).find(key => 
+    key.toLowerCase() === lowerCasePlatform
+  );
+  
+  if (platformKey) {
+    return platformColors[platformKey];
+  }
+  
+  // If not found, use a hash-based color generation for consistency
+  const hash = Array.from(platform)
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  // Use the hash to pick a color from the array
+  return colors[hash % colors.length];
+};
+
+// Add a function to prepare CSV data for platform revenue
+export const preparePlatformRevenueCSV = async (timeFilter: TimeFilter): Promise<string> => {
+  try {
+    // Fetch the platform revenue data using the existing function
+    const data = await fetchPlatformRevenueData(timeFilter);
+    
+    if (!data || data.length === 0) {
+      throw new Error('No platform revenue data available');
+    }
+    
+    // Sort platforms by total revenue (descending)
+    const platformRevenueMap: Record<string, number> = {};
+    data.forEach(item => {
+      if (!platformRevenueMap[item.platform]) {
+        platformRevenueMap[item.platform] = 0;
+      }
+      platformRevenueMap[item.platform] += item.protocol_revenue_usd;
+    });
+    
+    const sortedPlatforms = Object.entries(platformRevenueMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([platform]) => platform);
+    
+    // Sort data by platform (in order of revenue) and date
+    const sortedData = data.sort((a, b) => {
+      // First sort by platform revenue rank
+      const platformIndexA = sortedPlatforms.indexOf(a.platform);
+      const platformIndexB = sortedPlatforms.indexOf(b.platform);
+      
+      if (platformIndexA !== platformIndexB) {
+        return platformIndexA - platformIndexB;
+      }
+      
+      // Then sort by date
+      return new Date(a.block_date).getTime() - new Date(b.block_date).getTime();
+    });
+    
+    // Create CSV headers
+    const headers = ['block_date', 'Platform', 'protocol_revenue_usd'];
+    
+    // Create rows from the raw data in the format shown in the user's example
+    const rows = sortedData.map(item => [
+      item.block_date,
+      item.platform,
+      item.protocol_revenue_usd.toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    return csvContent;
+  } catch (error) {
+    console.error('Error preparing platform revenue CSV:', error);
+    throw error;
+  }
 }; 

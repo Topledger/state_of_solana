@@ -15,6 +15,7 @@ import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayM
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import { TimeFilter } from '../../../../api/REV/cost-capacity';
 import { TransactionDataPoint, fetchTransactionsData } from '../../../../api/REV/cost-capacity/transactionsData';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -48,13 +49,53 @@ interface TPSMetricsChartProps {
 
 // Chart colors
 export const tpsMetricsColors = {
-  total_tps: '#60a5fa', // blue
-  success_tps: '#34d399', // green
-  failed_tps: '#f87171', // red
-  real_tps: '#a78bfa', // purple
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  total_tps: colors[0], // blue
+  success_tps: colors[2], // green
+  failed_tps: colors[4], // red
+  real_tps: colors[1], // purple
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+};
+
+// Sort TPS metrics by total value and assign colors
+const getTpsColorMap = (data: TransactionDataPoint[]) => {
+  if (data.length === 0) return tpsMetricsColors;
+  
+  // Define TPS metrics
+  const metrics = ['total_tps', 'success_tps', 'failed_tps', 'real_tps'];
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Number(d[metric as keyof typeof d]) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    colors[0], // blue
+    colors[2], // green
+    colors[4], // red
+    colors[1], // purple
+  ];
+  
+  // Assign colors to metrics based on their value
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
+  return {
+    ...tpsMetricsColors,
+    ...colorMap,
+    // Preserve grid and axis colors
+    grid: tpsMetricsColors.grid,
+    axisLines: tpsMetricsColors.axisLines,
+    tickLabels: tpsMetricsColors.tickLabels
+  };
 };
 
 const TPSMetricsChart: React.FC<TPSMetricsChartProps> = ({
@@ -477,268 +518,297 @@ const TPSMetricsChart: React.FC<TPSMetricsChartProps> = ({
     }
   }, [tooltip.visible]);
 
+  // Define a default color map if needed
+  const defaultColorMap = {
+    total_tps: '#60a5fa',
+    success_tps: '#34d399',
+    failed_tps: '#f87171',
+    real_tps: '#a78bfa',
+    grid: 'rgba(229, 231, 235, 0.15)',
+    axisLines: 'rgba(229, 231, 235, 0.3)',
+    tickLabels: 'rgba(229, 231, 235, 0.6)'
+  };
+
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
-    // Use modal data/filters if in modal mode, otherwise use the main data/filters
-    const activeTimeFilter = isModal ? modalTimeFilter : timeFilter;
-    const activeDisplayMode = isModal ? modalDisplayMode : _displayMode;
-    const activeData = isModal ? modalData : data;
-    const activeFilteredData = isModal ? (isModalBrushActive ? modalFilteredData : modalData) : (isBrushActive ? filteredData : data);
-    const activeLoading = isModal ? modalLoading : loading;
-    const activeError = isModal ? modalError : error;
-    const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
-    const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
-    const activeHandleBrushChange = isModal ? handleModalBrushChange : handleBrushChange;
-    const activeClearBrush = isModal 
-      ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
-      : () => { setBrushDomain(null); setIsBrushActive(false); };
-    
-    // Show loading state
-    if (activeLoading) {
+    try {
+      if (isModal ? modalChartRef.current : chartRef.current) {
+        const svg = isModal ? modalChartRef.current : chartRef.current;
+        if (svg) {
+          // Clear existing content
+          while (svg.firstChild) {
+            svg.removeChild(svg.firstChild);
+          }
+
+          // Get dynamic color map based on data values
+          const colorMap = getTpsColorMap(isModal ? modalData : data);
+          
+          // Use modal data/filters if in modal mode, otherwise use the main data/filters
+          const activeTimeFilter = isModal ? modalTimeFilter : timeFilter;
+          const activeDisplayMode = isModal ? modalDisplayMode : _displayMode;
+          const activeData = isModal ? modalData : data;
+          const activeFilteredData = isModal ? (isModalBrushActive ? modalFilteredData : modalData) : (isBrushActive ? filteredData : data);
+          const activeLoading = isModal ? modalLoading : loading;
+          const activeError = isModal ? modalError : error;
+          const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
+          const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
+          const activeHandleBrushChange = isModal ? handleModalBrushChange : handleBrushChange;
+          const activeClearBrush = isModal 
+            ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
+            : () => { setBrushDomain(null); setIsBrushActive(false); };
+          
+          // Show loading state
+          if (activeLoading) {
+            return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
+          }
+          
+          // Show error state with refresh button
+          if (activeError || activeData.length === 0) {
+            return (
+              <div className="flex flex-col justify-center items-center h-full">
+                <div className="text-gray-400/80 text-xs mb-2">{activeError || 'No data available'}</div>
+                <ButtonSecondary onClick={isModal ? fetchModalData : () => fetchData()}>
+                  <div className="flex items-center gap-1.5">
+                    <RefreshIcon className="w-3.5 h-3.5" />
+                    <span>Refresh</span>
+                  </div>
+                </ButtonSecondary>
+              </div>
+            );
+          }
+          
+          return (
+            <div className="flex flex-col h-full">
+              {tooltip.visible && tooltip.dataPoint && (
+                <ChartTooltip
+                  title={formatDate(tooltip.dataPoint.date)}
+                  items={[
+                    {
+                      color: colorMap.total_tps,
+                      label: 'Total TPS',
+                      value: formatTPS(tooltip.dataPoint.total_tps),
+                      shape: 'circle'
+                    },
+                    {
+                      color: colorMap.success_tps,
+                      label: 'Success TPS',
+                      value: formatTPS(tooltip.dataPoint.success_tps),
+                      shape: 'circle'
+                    },
+                    {
+                      color: colorMap.failed_tps,
+                      label: 'Failed TPS',
+                      value: formatTPS(tooltip.dataPoint.failed_tps),
+                      shape: 'circle'
+                    },
+                    {
+                      color: colorMap.real_tps,
+                      label: 'Real TPS',
+                      value: formatTPS(tooltip.dataPoint.real_tps),
+                      shape: 'circle'
+                    }
+                  ]}
+                  top={tooltip.top}
+                  left={tooltip.left}
+                  isModal={isModal}
+                />
+              )}
+              
+              {/* Main chart */}
+              <div className="h-[85%] w-full overflow-hidden relative"
+                ref={isModal ? modalChartRef : chartRef}
+                onMouseMove={(e) => handleMouseMove(e, isModal)}
+                onMouseLeave={handleMouseLeave}
+              >
+                <ParentSize>
+                  {({ width, height }) => {
+                    if (width <= 0 || height <= 0) return null; 
+                    
+                    const margin = { top: 5, right: 25, bottom: 30, left: 45 };
+                    const innerWidth = width - margin.left - margin.right;
+                    const innerHeight = height - margin.top - margin.bottom;
+                    if (innerWidth <= 0 || innerHeight <= 0) return null;
+
+                    // Get data for chart
+                    const displayData = activeFilteredData;
+                    
+                    // Calculate max value for y-axis scales
+                    const maxTpsValue = Math.max(
+                      ...displayData.map(d => Math.max(
+                        d.total_tps,
+                        d.success_tps,
+                        d.failed_tps,
+                        d.real_tps
+                      ))
+                    );
+
+                    // Create scales
+                    const yScale = scaleLinear({
+                      domain: [0, maxTpsValue * 1.1], // Add 10% padding
+                      range: [innerHeight, 0],
+                      nice: true,
+                      round: false // Don't round values to ensure all grid lines show up
+                    });
+                    
+                    // Calculate explicit tick values for better grid line display
+                    const yTickValues = Array.from({ length: 8 }, (_, i) => 
+                      i * (maxTpsValue * 1.1) / 7
+                    );
+                                
+                    // X scale based on dates
+                    const xScale = scaleBand({
+                      domain: displayData.map((_, i) => i.toString()),
+                      range: [0, innerWidth],
+                      padding: 0.2,
+                    });
+                    
+                    // Create map for date lookup
+                    const dateMap = displayData.map(d => new Date(d.date));
+                    
+                    return (
+                      <svg width={width} height={height}>
+                        <Group left={margin.left} top={margin.top}>
+                          {/* Grid lines */}
+                          <GridRows
+                            scale={yScale}
+                            width={innerWidth}
+                            height={innerHeight}
+                            stroke={colorMap.grid}
+                            strokeOpacity={0.6}
+                            strokeDasharray="2,3"
+                            tickValues={yTickValues}
+                          />
+                          
+                          {/* Line for Total TPS */}
+                          <LinePath
+                            data={displayData}
+                            x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
+                            y={(d) => yScale(d.total_tps)}
+                            stroke={colorMap.total_tps}
+                            strokeWidth={1.5}
+                            curve={curveMonotoneX}
+                          />
+                          
+                          {/* Line for Success TPS */}
+                          <LinePath
+                            data={displayData}
+                            x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
+                            y={(d) => yScale(d.success_tps)}
+                            stroke={colorMap.success_tps}
+                            strokeWidth={1.5}
+                            curve={curveMonotoneX}
+                          />
+                          
+                          {/* Line for Failed TPS */}
+                          <LinePath
+                            data={displayData}
+                            x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
+                            y={(d) => yScale(d.failed_tps)}
+                            stroke={colorMap.failed_tps}
+                            strokeWidth={1.5}
+                            curve={curveMonotoneX}
+                          />
+                          
+                          {/* Line for Real TPS */}
+                          <LinePath
+                            data={displayData}
+                            x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
+                            y={(d) => yScale(d.real_tps)}
+                            stroke={colorMap.real_tps}
+                            strokeWidth={1.5}
+                            curve={curveMonotoneX}
+                          />
+                          
+                          {/* X-axis */}
+                          <AxisBottom 
+                            top={innerHeight} 
+                            scale={xScale}
+                            tickFormat={(index) => {
+                              const idx = parseInt(index);
+                              if (isNaN(idx) || idx < 0 || idx >= dateMap.length) return '';
+                              const date = dateMap[idx];
+                              // Custom formatting based on active time filter
+                              switch(activeTimeFilter) {
+                                case 'Y': return date.getFullYear().toString();
+                                case 'Q': return `Q${Math.floor(date.getMonth() / 3) + 1}`;
+                                case 'M': return date.toLocaleDateString('en-US', { month: 'short' });
+                                case 'W': return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                case 'D':
+                                default: return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              }
+                            }}
+                            stroke={colorMap.axisLines} 
+                            strokeWidth={0.5} 
+                            tickStroke="transparent" 
+                            tickLength={0}
+                            hideZero={true}
+                            tickLabelProps={() => ({ 
+                              fill: colorMap.tickLabels, 
+                              fontSize: 11, 
+                              fontWeight: 300, 
+                              letterSpacing: '0.05em',
+                              textAnchor: 'middle', 
+                              dy: '0.7em',
+                            })}
+                            numTicks={Math.min(5, displayData.length)}
+                          />
+                          
+                          {/* Y-axis (TPS values) */}
+                          <AxisLeft 
+                            scale={yScale}
+                            stroke={colorMap.axisLines} 
+                            strokeWidth={0.5} 
+                            tickStroke="transparent" 
+                            tickLength={0} 
+                            numTicks={5}
+                            tickFormat={(value) => formatTPS(value as number)}
+                            tickLabelProps={() => ({ 
+                              fill: colorMap.tickLabels, 
+                              fontSize: 11, 
+                              fontWeight: 300, 
+                              letterSpacing: '0.05em',
+                              textAnchor: 'end', 
+                              dx: '-0.6em', 
+                              dy: '0.25em' 
+                            })}
+                          />
+                        </Group>
+                      </svg>
+                    );
+                    
+                    // Helper function to get x position from index
+                    function xPosition(index: string): number {
+                      return (xScale(index) || 0);
+                    }
+                  }}
+                </ParentSize>
+              </div>
+              
+              {/* Brush component */}
+              <div className="h-[15%] w-full mt-1">
+                <BrushTimeScale
+                  data={isModal ? modalData : data}
+                  isModal={isModal}
+                  activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
+                  onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
+                  onClearBrush={isModal 
+                    ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
+                    : () => { setBrushDomain(null); setIsBrushActive(false); }
+                  }
+                  getDate={(d) => d.date}
+                  getValue={(d) => d.total_tps}
+                  lineColor={colorMap.total_tps}
+                  margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
+                />
+              </div>
+            </div>
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[Chart] Error rendering chart:', err);
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
     }
-    
-    // Show error state with refresh button
-    if (activeError || activeData.length === 0) {
-      return (
-        <div className="flex flex-col justify-center items-center h-full">
-          <div className="text-gray-400/80 text-xs mb-2">{activeError || 'No data available'}</div>
-          <ButtonSecondary onClick={isModal ? fetchModalData : () => fetchData()}>
-            <div className="flex items-center gap-1.5">
-              <RefreshIcon className="w-3.5 h-3.5" />
-              <span>Refresh</span>
-            </div>
-          </ButtonSecondary>
-        </div>
-      );
-    }
-    
-    return (
-      <div className="flex flex-col h-full">
-        {tooltip.visible && tooltip.dataPoint && (
-          <ChartTooltip
-            title={formatDate(tooltip.dataPoint.date)}
-            items={[
-              {
-                color: tpsMetricsColors.total_tps,
-                label: 'Total TPS',
-                value: formatTPS(tooltip.dataPoint.total_tps),
-                shape: 'circle'
-              },
-              {
-                color: tpsMetricsColors.success_tps,
-                label: 'Success TPS',
-                value: formatTPS(tooltip.dataPoint.success_tps),
-                shape: 'circle'
-              },
-              {
-                color: tpsMetricsColors.failed_tps,
-                label: 'Failed TPS',
-                value: formatTPS(tooltip.dataPoint.failed_tps),
-                shape: 'circle'
-              },
-              {
-                color: tpsMetricsColors.real_tps,
-                label: 'Real TPS',
-                value: formatTPS(tooltip.dataPoint.real_tps),
-                shape: 'circle'
-              }
-            ]}
-            top={tooltip.top}
-            left={tooltip.left}
-            isModal={isModal}
-          />
-        )}
-        
-        {/* Main chart */}
-        <div className="h-[85%] w-full overflow-hidden relative"
-          ref={isModal ? modalChartRef : chartRef}
-          onMouseMove={(e) => handleMouseMove(e, isModal)}
-          onMouseLeave={handleMouseLeave}
-        >
-          <ParentSize>
-            {({ width, height }) => {
-              if (width <= 0 || height <= 0) return null; 
-              
-              const margin = { top: 5, right: 25, bottom: 30, left: 45 };
-              const innerWidth = width - margin.left - margin.right;
-              const innerHeight = height - margin.top - margin.bottom;
-              if (innerWidth <= 0 || innerHeight <= 0) return null;
-
-              // Get data for chart
-              const displayData = activeFilteredData;
-              
-              // Calculate max value for y-axis scales
-              const maxTpsValue = Math.max(
-                ...displayData.map(d => Math.max(
-                  d.total_tps,
-                  d.success_tps,
-                  d.failed_tps,
-                  d.real_tps
-                ))
-              );
-
-              // Create scales
-              const yScale = scaleLinear({
-                domain: [0, maxTpsValue * 1.1], // Add 10% padding
-                range: [innerHeight, 0],
-                nice: true,
-                round: false // Don't round values to ensure all grid lines show up
-              });
-              
-              // Calculate explicit tick values for better grid line display
-              const yTickValues = Array.from({ length: 8 }, (_, i) => 
-                i * (maxTpsValue * 1.1) / 7
-              );
-                          
-              // X scale based on dates
-              const xScale = scaleBand({
-                domain: displayData.map((_, i) => i.toString()),
-                range: [0, innerWidth],
-                padding: 0.2,
-              });
-              
-              // Create map for date lookup
-              const dateMap = displayData.map(d => new Date(d.date));
-              
-              return (
-                <svg width={width} height={height}>
-                  <Group left={margin.left} top={margin.top}>
-                    {/* Grid lines */}
-                    <GridRows
-                      scale={yScale}
-                      width={innerWidth}
-                      height={innerHeight}
-                      stroke={tpsMetricsColors.grid}
-                      strokeOpacity={0.6}
-                      strokeDasharray="2,3"
-                      tickValues={yTickValues}
-                    />
-                    
-                    {/* Line for Total TPS */}
-                    <LinePath
-                      data={displayData}
-                      x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
-                      y={(d) => yScale(d.total_tps)}
-                      stroke={tpsMetricsColors.total_tps}
-                      strokeWidth={1.5}
-                      curve={curveMonotoneX}
-                    />
-                    
-                    {/* Line for Success TPS */}
-                    <LinePath
-                      data={displayData}
-                      x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
-                      y={(d) => yScale(d.success_tps)}
-                      stroke={tpsMetricsColors.success_tps}
-                      strokeWidth={1.5}
-                      curve={curveMonotoneX}
-                    />
-                    
-                    {/* Line for Failed TPS */}
-                    <LinePath
-                      data={displayData}
-                      x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
-                      y={(d) => yScale(d.failed_tps)}
-                      stroke={tpsMetricsColors.failed_tps}
-                      strokeWidth={1.5}
-                      curve={curveMonotoneX}
-                    />
-                    
-                    {/* Line for Real TPS */}
-                    <LinePath
-                      data={displayData}
-                      x={(d, i) => xPosition(i.toString()) + xScale.bandwidth() / 2}
-                      y={(d) => yScale(d.real_tps)}
-                      stroke={tpsMetricsColors.real_tps}
-                      strokeWidth={1.5}
-                      curve={curveMonotoneX}
-                    />
-                    
-                    {/* X-axis */}
-                    <AxisBottom 
-                      top={innerHeight} 
-                      scale={xScale}
-                      tickFormat={(index) => {
-                        const idx = parseInt(index);
-                        if (isNaN(idx) || idx < 0 || idx >= dateMap.length) return '';
-                        const date = dateMap[idx];
-                        // Custom formatting based on active time filter
-                        switch(activeTimeFilter) {
-                          case 'Y': return date.getFullYear().toString();
-                          case 'Q': return `Q${Math.floor(date.getMonth() / 3) + 1}`;
-                          case 'M': return date.toLocaleDateString('en-US', { month: 'short' });
-                          case 'W': return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                          case 'D':
-                          default: return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        }
-                      }}
-                      stroke={tpsMetricsColors.axisLines} 
-                      strokeWidth={0.5} 
-                      tickStroke="transparent" 
-                      tickLength={0}
-                      hideZero={true}
-                      tickLabelProps={() => ({ 
-                        fill: tpsMetricsColors.tickLabels, 
-                        fontSize: 11, 
-                        fontWeight: 300, 
-                        letterSpacing: '0.05em',
-                        textAnchor: 'middle', 
-                        dy: '0.7em',
-                      })}
-                      numTicks={Math.min(5, displayData.length)}
-                    />
-                    
-                    {/* Y-axis (TPS values) */}
-                    <AxisLeft 
-                      scale={yScale}
-                      stroke={tpsMetricsColors.axisLines} 
-                      strokeWidth={0.5} 
-                      tickStroke="transparent" 
-                      tickLength={0} 
-                      numTicks={5}
-                      tickFormat={(value) => formatTPS(value as number)}
-                      tickLabelProps={() => ({ 
-                        fill: tpsMetricsColors.tickLabels, 
-                        fontSize: 11, 
-                        fontWeight: 300, 
-                        letterSpacing: '0.05em',
-                        textAnchor: 'end', 
-                        dx: '-0.6em', 
-                        dy: '0.25em' 
-                      })}
-                    />
-                  </Group>
-                </svg>
-              );
-              
-              // Helper function to get x position from index
-              function xPosition(index: string): number {
-                return (xScale(index) || 0);
-              }
-            }}
-          </ParentSize>
-        </div>
-        
-        {/* Brush component */}
-        <div className="h-[15%] w-full mt-1">
-          <BrushTimeScale
-            data={isModal ? modalData : data}
-            isModal={isModal}
-            activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
-            onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
-            onClearBrush={isModal 
-              ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
-              : () => { setBrushDomain(null); setIsBrushActive(false); }
-            }
-            getDate={(d) => d.date}
-            getValue={(d) => d.total_tps}
-            lineColor={tpsMetricsColors.total_tps}
-            margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
-          />
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -760,36 +830,36 @@ const TPSMetricsChart: React.FC<TPSMetricsChartProps> = ({
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
               <div className="text-[10px] text-gray-400 mb-2">METRICS</div>
               
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full mr-1.5" 
-                  style={{ backgroundColor: tpsMetricsColors.total_tps }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Total TPS</span>
-              </div>
-              
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full mr-1.5" 
-                  style={{ backgroundColor: tpsMetricsColors.success_tps }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Success TPS</span>
-              </div>
-              
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full mr-1.5" 
-                  style={{ backgroundColor: tpsMetricsColors.failed_tps }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Failed TPS</span>
-              </div>
-              
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-full mr-1.5" 
-                  style={{ backgroundColor: tpsMetricsColors.real_tps }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Real TPS</span>
+              {/* Legend */}
+              <div className="mt-2 flex flex-wrap gap-4 justify-center">
+                <div className="flex items-center">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full mr-1.5" 
+                    style={{ backgroundColor: defaultColorMap.total_tps }}
+                  ></div>
+                  <span className="text-[11px] text-gray-300">Total TPS</span>
+                </div>
+                <div className="flex items-center">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full mr-1.5" 
+                    style={{ backgroundColor: defaultColorMap.success_tps }}
+                  ></div>
+                  <span className="text-[11px] text-gray-300">Success TPS</span>
+                </div>
+                <div className="flex items-center">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full mr-1.5" 
+                    style={{ backgroundColor: defaultColorMap.failed_tps }}
+                  ></div>
+                  <span className="text-[11px] text-gray-300">Failed TPS</span>
+                </div>
+                <div className="flex items-center">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full mr-1.5" 
+                    style={{ backgroundColor: defaultColorMap.real_tps }}
+                  ></div>
+                  <span className="text-[11px] text-gray-300">Real TPS</span>
+                </div>
               </div>
             </div>
           </div>

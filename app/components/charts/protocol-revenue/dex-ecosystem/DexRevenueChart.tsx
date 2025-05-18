@@ -11,7 +11,7 @@ import { localPoint } from '@visx/event';
 import Loader from "@/app/components/shared/Loader";
 import ButtonSecondary from "@/app/components/shared/buttons/ButtonSecondary";
 import ChartTooltip from "@/app/components/shared/ChartTooltip";
-import Modal from "@/app/components/shared/Modal";
+import Modal, { ScrollableLegend } from "@/app/components/shared/Modal";
 import LegendItem from "@/app/components/shared/LegendItem";
 import BrushTimeScale from "@/app/components/shared/BrushTimeScale";
 
@@ -60,6 +60,25 @@ interface StackedBarData {
   date: Date;
   [platform: string]: any;
 }
+
+// Process data for brush component - aggregate revenue by date/month
+const processDataForBrush = (data: ExtendedDexRevenueDataPoint[]) => {
+  // Group data by month and sum revenue
+  const revenueByMonth = data.reduce<Record<string, number>>((acc, curr) => {
+    if (!acc[curr.month]) {
+      acc[curr.month] = 0;
+    }
+    acc[curr.month] += curr.protocol_revenue;
+    return acc;
+  }, {});
+  
+  // Convert to array of { date, value } objects
+  return Object.entries(revenueByMonth).map(([month, value]) => ({
+    month,
+    date: new Date(month),
+    value
+  }));
+};
 
 // Main chart component
 const DexRevenueChart: React.FC<DexRevenueChartProps> = ({ 
@@ -310,7 +329,7 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
     if (currentData.length === 0) return;
     
     // Calculate available chart space
-    const margin = { top: 20, right: 20, bottom: 60, left: 90 };
+    const margin = { top: 10, right: 15, bottom: 30, left: 40 };
     const innerWidth = rect.width - margin.left - margin.right;
     
     // Calculate bar width
@@ -360,15 +379,14 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
     }
   }, [tooltip.visible]);
   
-  // Format date for display to match the image format (MM/DD/YY HH:MM)
-  const formatDate = (date: string) => {
-    const d = new Date(date);
-    const formattedDate = d.toLocaleDateString('en-US', { 
-      month: '2-digit',
-      day: '2-digit',
-      year: '2-digit'
+  // Format date for display to match the format in RevenueBySegmentChart
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    // Use more readable format - Month name and year
+    return d.toLocaleDateString('en-US', { 
+      month: 'short',
+      year: 'numeric'
     });
-    return formattedDate;
   };
   
   // Render chart content
@@ -397,6 +415,13 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
     const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
     const isActiveBrush = isModal ? isModalBrushActive : isBrushActive;
     
+    // Define consistent margins for chart and brush to ensure alignment
+    const chartMargin = { top: 10, right: 15, bottom: 30, left: 40 };
+    const brushMargin = { top: 5, right: chartMargin.right, bottom: 10, left: chartMargin.left };
+    
+    // Process data for brush
+    const brushData = processDataForBrush(rawData);
+    
     return (
       <div className="flex flex-col h-full">
         {tooltip.visible && tooltip.items.length > 0 && (
@@ -424,7 +449,7 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
             {({ width, height }) => {
               if (width <= 0 || height <= 0) return null;
               
-              const margin = { top: 10, right: 20, bottom: 50, left: 90 };
+              const margin = chartMargin;
               const innerWidth = width - margin.left - margin.right;
               const innerHeight = height - margin.top - margin.bottom;
               if (innerWidth <= 0 || innerHeight <= 0) return null;
@@ -544,12 +569,11 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
                         dy: '0.5em'
                       })}
                       tickFormat={(date) => {
-                        // Format date for display to match MM/DD/YY format
+                        // Format date for display to match Month YYYY format
                         const d = new Date(date as string);
                         return d.toLocaleDateString('en-US', { 
-                          month: '2-digit',
-                          day: '2-digit',
-                          year: '2-digit'
+                          month: 'short',
+                          year: 'numeric'
                         });
                       }}
                     />
@@ -583,33 +607,25 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
         
         {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
-          <ParentSize>
-            {({ width, height }) => {
-              if (width <= 0 || height <= 0) return null;
-              
-              return (
-                <BrushTimeScale
-                  data={rawData}
-                  isModal={isModal}
-                  activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
-                  onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
-                  onClearBrush={() => {
-                    if (isModal) {
-                      setModalBrushDomain(null);
-                      setIsModalBrushActive(false);
-                    } else {
-                      setBrushDomain(null);
-                      setIsBrushActive(false);
-                    }
-                  }}
-                  getDate={(d: any) => d.date ? d.date.toISOString() : d.month}
-                  getValue={(d: any) => d.protocol_revenue}
-                  lineColor="#60a5fa"
-                  margin={{ top: 5, right: 20, bottom: 10, left: 90 }}
-                />
-              );
+          <BrushTimeScale
+            data={brushData}
+            isModal={isModal}
+            activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
+            onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
+            onClearBrush={() => {
+              if (isModal) {
+                setModalBrushDomain(null);
+                setIsModalBrushActive(false);
+              } else {
+                setBrushDomain(null);
+                setIsBrushActive(false);
+              }
             }}
-          </ParentSize>
+            getDate={(d) => d.date.toISOString()}
+            getValue={(d) => d.value}
+            lineColor="#60a5fa"
+            margin={brushMargin}
+          />
         </div>
       </div>
     );
@@ -636,7 +652,7 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
             
             {/* Legend area - 10% width */}
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-              <div className="text-[10px] text-gray-400 mb-2">PLATFORMS</div>
+              
               {loading ? (
                 // Show loading state
                 <>
@@ -645,25 +661,23 @@ const DexRevenueChart: React.FC<DexRevenueChartProps> = ({
                   <LegendItem label="Loading..." color="#34d399" isLoading={true} />
                 </>
               ) : (
-                // Create legend items array
-                <div className="flex flex-col gap-1 overflow-y-auto max-h-[500px] pr-1">
-                  {availablePlatforms.map((platform) => {
+                <ScrollableLegend
+                  items={availablePlatforms.map((platform) => {
                     // Calculate total revenue for this platform
                     const platformRevenue = rawData
                       .filter(d => d.platform === platform)
                       .reduce((sum, item) => sum + item.protocol_revenue, 0);
                       
-                    return (
-                      <LegendItem
-                        key={platform}
-                        label={platform}
-                        color={getDexColor(platform)}
-                        shape="square"
-                        tooltipText={formatCurrency(platformRevenue)}
-                      />
-                    );
+                    return {
+                      id: platform,
+                      label: platform,
+                      color: getDexColor(platform),
+                      
+                    };
                   })}
-                </div>
+                  maxHeight={600}
+                  maxItems={28}
+                />
               )}
             </div>
           </div>

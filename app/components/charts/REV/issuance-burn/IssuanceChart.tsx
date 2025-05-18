@@ -49,11 +49,47 @@ export const issuanceColors = {
   grid: '#1f2937',
 };
 
-// Export colors for external use
-export const getIssuanceChartColors = () => {
+// Sort issuance metrics by total value and assign colors
+const getValueBasedColors = (data: IssuanceDataPoint[]) => {
+  if (data.length === 0) return issuanceColors;
+  
+  // Define metrics to consider
+  const metrics = ['gross_sol_issuance', 'net_sol_issuance'];
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Math.abs(Number(d[metric as keyof typeof d])) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    '#60a5fa', // blue
+    '#a78bfa', // purple
+  ];
+  
+  // Create a dynamic color map
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
   return {
-    gross: issuanceColors.grossIssuance,
-    net: issuanceColors.netIssuance
+    ...issuanceColors,
+    grossIssuance: colorMap.gross_sol_issuance || issuanceColors.grossIssuance,
+    netIssuance: colorMap.net_sol_issuance || issuanceColors.netIssuance
+  };
+};
+
+// Export colors for external use with dynamic color assignment
+export const getIssuanceChartColors = (data?: IssuanceDataPoint[]) => {
+  const colors = data ? getValueBasedColors(data) : issuanceColors;
+  return {
+    gross: colors.grossIssuance,
+    net: colors.netIssuance
   };
 };
 
@@ -417,6 +453,9 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
       ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
       : () => { setBrushDomain(null); setIsBrushActive(false); };
     
+    // Get dynamic colors based on value
+    const dynamicColors = getValueBasedColors(activeFilteredData);
+    
     // Show loading state
     if (activeLoading) {
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
@@ -444,13 +483,13 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
             title={formatDate(tooltip.dataPoint.date)}
             items={[
               { 
-                color: issuanceColors.grossIssuance, 
+                color: dynamicColors.grossIssuance, 
                 label: 'Gross Issuance', 
                 value: formatSolAmount(tooltip.dataPoint.gross_sol_issuance, activeCurrency), 
                 shape: 'square' 
               },
               { 
-                color: issuanceColors.netIssuance, 
+                color: dynamicColors.netIssuance, 
                 label: 'Net Issuance', 
                 value: formatSolAmount(tooltip.dataPoint.net_sol_issuance, activeCurrency), 
                 shape: 'circle' 
@@ -496,7 +535,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
               
               // Determine y-axis domain to ensure 0 is included
               let yMin = 0;
-              let yMax = maxValue * 1.1; // Add 10% padding to maximum value
+              const yMax = maxValue * 1.1; // Add 10% padding to maximum value
               
               // If we have negative values, include them but maintain 0 in the domain
               if (minValue < 0) {
@@ -516,7 +555,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                     <GridRows 
                       scale={issuanceScale} 
                       width={innerWidth} 
-                      stroke={issuanceColors.grid} 
+                      stroke={dynamicColors.grid} 
                       strokeDasharray="2,3" 
                       strokeOpacity={0.5} 
                       numTicks={5} 
@@ -524,7 +563,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                     
                     {/* Display active brush status */}
                     {activeIsBrushActive && (
-                      <text x={0} y={-8} fontSize={8} fill={issuanceColors.grossIssuance} textAnchor="start">
+                      <text x={0} y={-8} fontSize={8} fill={dynamicColors.grossIssuance} textAnchor="start">
                         {`Filtered: ${displayData.length} item${displayData.length !== 1 ? 's' : ''}`}
                       </text>
                     )}
@@ -535,7 +574,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                       x2={innerWidth}
                       y1={issuanceScale(0)}
                       y2={issuanceScale(0)}
-                      stroke={issuanceColors.axisLines}
+                      stroke={dynamicColors.axisLines}
                       strokeWidth={1}
                       strokeOpacity={0.3}
                     />
@@ -545,7 +584,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                       data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => issuanceScale(d.gross_sol_issuance)}
-                      stroke={issuanceColors.grossIssuance} 
+                      stroke={dynamicColors.grossIssuance} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -555,7 +594,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                       data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => issuanceScale(d.net_sol_issuance)}
-                      stroke={issuanceColors.netIssuance} 
+                      stroke={dynamicColors.netIssuance} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -567,14 +606,14 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                         const d = date as Date;
                         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                       }}
-                      stroke={issuanceColors.axisLines} 
+                      stroke={dynamicColors.axisLines} 
                       strokeWidth={0.5} 
                       tickStroke="transparent" 
                       tickLength={0}
                       hideZero={true}
                       numTicks={Math.min(5, displayData.length)}
                       tickLabelProps={() => ({ 
-                        fill: issuanceColors.tickLabels, 
+                        fill: dynamicColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -585,7 +624,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                     
                     <AxisLeft 
                       scale={issuanceScale} 
-                      stroke={issuanceColors.axisLines} 
+                      stroke={dynamicColors.axisLines} 
                       strokeWidth={0.5} 
                       tickStroke="transparent" 
                       tickLength={0} 
@@ -606,7 +645,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
                         }
                       }}
                       tickLabelProps={() => ({ 
-                        fill: issuanceColors.tickLabels, 
+                        fill: dynamicColors.tickLabels, 
                         fontSize: 11, 
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -635,7 +674,7 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
             }
             getDate={(d) => d.date}
             getValue={(d) => d.gross_sol_issuance}
-            lineColor={issuanceColors.grossIssuance}
+            lineColor={dynamicColors.grossIssuance}
             margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
           />
         </div>
@@ -679,16 +718,13 @@ const IssuanceChart: React.FC<IssuanceChartProps> = ({
               <div className="flex flex-col gap-4 pt-4">
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    {getAvailableChartMetrics(modalData, { 
-                      gross: issuanceColors.grossIssuance, 
-                      net: issuanceColors.netIssuance 
-                    }).map(metric => (
+                    {getAvailableChartMetrics(modalData, getIssuanceChartColors(modalData)).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 
-                          className={`w-2.5 h-2.5 mr-2 ${metric.shape === 'circle' ? 'rounded-full' : 'rounded-sm'} mt-0.5`}
-                          style={{ background: metric.color }}
+                          className="w-2.5 h-2.5 rounded-sm mr-1.5" 
+                          style={{ backgroundColor: metric.color }}
                         ></div>
-                        <span className="text-[11px] text-gray-300">{metric.displayName}</span>
+                        <span className="text-[11px] text-gray-200">{metric.displayName}</span>
                       </div>
                     ))}
                   </div>

@@ -136,7 +136,7 @@ const CurrencyFilter: React.FC<CurrencyFilterProps> = ({
   if (options.length <= 2) {
     return (
       <div className="flex items-center">
-        {!isCompact && <span className="text-xs text-gray-400 mr-2">{label}:</span>}
+        
         <div className="flex space-x-1 bg-gray-900/60 rounded-md p-0.5">
           {options.map((option) => (
             <button

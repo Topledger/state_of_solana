@@ -50,12 +50,50 @@ export const rewardsAndBurnColors = {
   grid: '#1f2937',
 };
 
-// Export colors for external use
-export const getRewardsAndBurnColors = () => {
+// Sort metrics by total value and assign colors
+const getValueBasedColors = (data: IssuanceDataPoint[]) => {
+  if (data.length === 0) return rewardsAndBurnColors;
+  
+  // Define metrics to consider
+  const metrics = ['sol_burn', 'staking_reward', 'voting_reward'];
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Math.abs(Number(d[metric as keyof typeof d])) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    '#f43f5e', // red
+    '#34d399', // green
+    '#facc15', // yellow
+  ];
+  
+  // Create a dynamic color map
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
   return {
-    burn: rewardsAndBurnColors.solBurn,
-    staking: rewardsAndBurnColors.stakingReward,
-    voting: rewardsAndBurnColors.votingReward
+    ...rewardsAndBurnColors,
+    solBurn: colorMap.sol_burn || rewardsAndBurnColors.solBurn,
+    stakingReward: colorMap.staking_reward || rewardsAndBurnColors.stakingReward,
+    votingReward: colorMap.voting_reward || rewardsAndBurnColors.votingReward
+  };
+};
+
+// Export colors for external use with dynamic color assignment
+export const getRewardsAndBurnColors = (data?: IssuanceDataPoint[]) => {
+  const colors = data ? getValueBasedColors(data) : rewardsAndBurnColors;
+  return {
+    burn: colors.solBurn,
+    staking: colors.stakingReward,
+    voting: colors.votingReward
   };
 };
 
@@ -422,6 +460,9 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
       ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
       : () => { setBrushDomain(null); setIsBrushActive(false); };
     
+    // Get dynamic colors based on value
+    const dynamicColors = getValueBasedColors(activeFilteredData);
+    
     // Show loading state
     if (activeLoading) {
       return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
@@ -449,19 +490,19 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
             title={formatDate(tooltip.dataPoint.date)}
             items={[
               { 
-                color: rewardsAndBurnColors.solBurn, 
+                color: dynamicColors.solBurn, 
                 label: 'SOL Burn', 
                 value: formatSolAmount(tooltip.dataPoint.sol_burn, activeCurrency), 
                 shape: 'square' 
               },
               { 
-                color: rewardsAndBurnColors.stakingReward, 
+                color: dynamicColors.stakingReward, 
                 label: 'Staking Reward', 
                 value: formatSolAmount(tooltip.dataPoint.staking_reward, activeCurrency), 
                 shape: 'circle' 
               },
               { 
-                color: rewardsAndBurnColors.votingReward, 
+                color: dynamicColors.votingReward, 
                 label: 'Voting Reward', 
                 value: formatSolAmount(tooltip.dataPoint.voting_reward, activeCurrency), 
                 shape: 'circle' 
@@ -525,7 +566,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
                     
                     {/* Display active brush status */}
                     {activeIsBrushActive && (
-                      <text x={0} y={-8} fontSize={8} fill={rewardsAndBurnColors.solBurn} textAnchor="start">
+                      <text x={0} y={-8} fontSize={8} fill={dynamicColors.solBurn} textAnchor="start">
                         {`Filtered: ${displayData.length} item${displayData.length !== 1 ? 's' : ''}`}
                       </text>
                     )}
@@ -546,7 +587,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
                       data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => valueScale(d.sol_burn)}
-                      stroke={rewardsAndBurnColors.solBurn} 
+                      stroke={dynamicColors.solBurn} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -556,7 +597,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
                       data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => valueScale(d.staking_reward)}
-                      stroke={rewardsAndBurnColors.stakingReward} 
+                      stroke={dynamicColors.stakingReward} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -566,7 +607,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
                       data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => valueScale(d.voting_reward)}
-                      stroke={rewardsAndBurnColors.votingReward} 
+                      stroke={dynamicColors.votingReward} 
                       strokeWidth={1.5} 
                       curve={curveMonotoneX} 
                     />
@@ -647,7 +688,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
             }
             getDate={(d) => d.date}
             getValue={(d) => d.sol_burn}
-            lineColor={rewardsAndBurnColors.solBurn}
+            lineColor={dynamicColors.solBurn}
             margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
           />
         </div>
@@ -691,11 +732,7 @@ const RewardsAndBurnChart: React.FC<RewardsAndBurnChartProps> = ({
               <div className="flex flex-col gap-4 pt-4">
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    {getAvailableChartMetrics(modalData, { 
-                      burn: rewardsAndBurnColors.solBurn, 
-                      staking: rewardsAndBurnColors.stakingReward,
-                      voting: rewardsAndBurnColors.votingReward
-                    }).map(metric => (
+                    {getAvailableChartMetrics(modalData, getRewardsAndBurnColors(modalData)).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 
                           className={`w-2.5 h-2.5 mr-2 ${metric.shape === 'circle' ? 'rounded-full' : 'rounded-sm'} mt-0.5`}

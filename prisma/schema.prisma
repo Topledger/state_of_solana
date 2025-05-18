@@ -1,0 +1,20 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Using SQLite for easier setup
+  url      = env("DATABASE_URL")
+}
+
+model Chart {
+  id        String   @id
+  title     String
+  page      String
+  config    String   // Stores the JSON chart config
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+} 

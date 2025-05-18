@@ -3,465 +3,312 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ParentSize } from '@visx/responsive';
 import { Group } from '@visx/group';
+import { BarStack } from '@visx/shape';
+import { scaleBand, scaleLinear, scaleOrdinal } from '@visx/scale';
 import { GridRows } from '@visx/grid';
-import { scaleLinear, scaleBand, scaleOrdinal, scaleTime } from '@visx/scale';
 import { AxisBottom, AxisLeft } from '@visx/axis';
-import { Bar, BarStack } from '@visx/shape';
 import { localPoint } from '@visx/event';
-import Loader from "@/app/components/shared/Loader";
-import ButtonSecondary from "@/app/components/shared/buttons/ButtonSecondary";
-import ChartTooltip from "@/app/components/shared/ChartTooltip";
-import Modal from "@/app/components/shared/Modal";
-import TimeFilterSelector from "@/app/components/shared/filters/TimeFilter";
-import BrushTimeScale from "@/app/components/shared/BrushTimeScale";
-import LegendItem from "@/app/components/shared/LegendItem";
-import DisplayModeFilter, { DisplayMode } from "@/app/components/shared/filters/DisplayModeFilter";
-
+import Loader from '../../../shared/Loader';
+import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
+import Modal, { ScrollableLegend } from '../../../shared/Modal';
+import TimeFilterSelector from '../../../shared/filters/TimeFilter';
+import ChartTooltip from '../../../shared/ChartTooltip';
+import BrushTimeScale from '../../../shared/BrushTimeScale';
+import LegendItem from '../../../shared/LegendItem';
 import { 
+  TimeFilter, 
   fetchRevenueBySegmentData, 
-  RevenueBySegmentDataPoint, 
+  formatCurrency, 
+  formatDate, 
+  formatAxisDate,
+  getSegmentColor, 
+  segmentColors, 
   segmentKeys,
-  formatCurrency,
-  formatDate,
-  TimeFilter
-} from "@/app/api/protocol-revenue/total/revenueBySegmentData";
-import { TimeFilter as ChartDataTimeFilter } from "@/app/api/protocol-revenue/summary/chartData";
+  RevenueBySegmentDataPoint
+} from '../../../../api/protocol-revenue/total/revenueBySegmentData';
+import { grid, axisLines, tickLabels } from '../../../../utils/chartColors';
+import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayModeFilter';
 
-// Define RefreshIcon component
-const RefreshIcon = ({ className = "w-4 h-4" }) => {
-  return (
-    <svg 
-      className={className} 
-      fill="none" 
-      stroke="currentColor" 
-      viewBox="0 0 24 24" 
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path 
-        strokeLinecap="round" 
-        strokeLinejoin="round" 
-        strokeWidth={2} 
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-      />
+const RefreshIcon = ({ className = "w-4 h-4" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
     </svg>
   );
-};
 
-// Props interface
-interface RevenueBySegmentChartProps {
-  timeFilter?: TimeFilter;
-  displayMode?: DisplayMode;
-  isModalOpen?: boolean;
-  onModalClose?: () => void;
-  onTimeFilterChange?: (filter: TimeFilter) => void;
-  legendsChanged?: (legends: {label: string, color: string, value?: number}[]) => void;
+interface StackedDataPoint {
+  date: string;
+  [key: string]: string | number;
 }
 
-// Chart colors - using a color mapping for different segments
-export const segmentColors: Record<string, string> = {
-  'DeFi': '#60a5fa', // blue
-  'NFT Marketplace': '#a78bfa', // purple
-  'Gaming': '#34d399', // green
-  'Infrastructure': '#f97316', // orange
-  'Wallet': '#fbbf24', // yellow
-  'Other': '#94a3b8', // gray
-  'default': '#6b7280',
-};
+interface RevenueBySegmentChartProps {
+  timeFilter?: TimeFilter;
+  isModalOpen?: boolean;
+  onModalClose?: () => void;
+  onTimeFilterChange?: (val: TimeFilter) => void;
+  segmentsChanged?: (segments: Array<{segment: string, color: string, revenue: number}>) => void;
+  displayMode?: DisplayMode;
+  onDisplayModeChange?: (mode: DisplayMode) => void;
+}
 
-// Get color for a segment with fallback to default
-const getSegmentColor = (segment: string): string => {
-  return segmentColors[segment] || segmentColors.default;
-};
-
-// Format the display name for segments
-const getSegmentDisplayName = (segment: string): string => {
-  return segment;
-};
-
-// Process data for stacked bar chart
-const processDataForBarStack = (data: RevenueBySegmentDataPoint[]) => {
-  // Group data by date
-  const groupedByDate = data.reduce<Record<string, any>>((acc, curr) => {
-    if (!acc[curr.block_date]) {
-      acc[curr.block_date] = { date: curr.block_date };
-    }
-    
-    // Add or update segment revenue
-    acc[curr.block_date][curr.segment] = curr.protocol_revenue;
-    
-    return acc;
-  }, {});
-  
-  // Convert to array
-  return Object.values(groupedByDate);
-};
-
-// Main chart component
 const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({ 
-  timeFilter = 'W',
-  displayMode = 'absolute',
+  timeFilter = 'M',
   isModalOpen = false, 
   onModalClose = () => {},
   onTimeFilterChange,
-  legendsChanged
+  segmentsChanged,
+  displayMode: externalDisplayMode,
+  onDisplayModeChange,
 }) => {
-  // State for chart data
-  const [data, setData] = useState<RevenueBySegmentDataPoint[]>([]);
-  const [processedData, setProcessedData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<RevenueBySegmentDataPoint[]>([]);
-  const [processedFilteredData, setProcessedFilteredData] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [data, setData] = useState<StackedDataPoint[]>([]);
+  const [keys, setKeys] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isBrushActive, setIsBrushActive] = useState(false);
   const [brushDomain, setBrushDomain] = useState<[Date, Date] | null>(null);
-  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [filteredData, setFilteredData] = useState<StackedDataPoint[]>([]);
+  const [internalDisplayMode, setInternalDisplayMode] = useState<DisplayMode>('absolute');
+  const [modalDisplayMode, setModalDisplayMode] = useState<DisplayMode>('absolute');
   
-  // State for tooltip
+  // Use external or internal display mode, or modal display mode when in modal
+  const displayMode = isModalOpen 
+    ? modalDisplayMode 
+    : (externalDisplayMode || internalDisplayMode);
+  
+  // Handle display mode change
+  const handleDisplayModeChange = (mode: DisplayMode) => {
+    if (isModalOpen) {
+      // In modal, use the modal-specific state
+      setModalDisplayMode(mode);
+      console.log(`Modal display mode changed to: ${mode}`);
+    } else if (onDisplayModeChange) {
+      // If parent is controlling display mode
+      onDisplayModeChange(mode);
+      console.log(`External display mode changed to: ${mode}`);
+    } else {
+      // Otherwise use internal state
+      setInternalDisplayMode(mode);
+      console.log(`Internal display mode changed to: ${mode}`);
+    }
+  };
+  
+  // Initialize modal display mode when modal opens
+  useEffect(() => {
+    if (isModalOpen) {
+      setModalDisplayMode(externalDisplayMode || internalDisplayMode);
+    }
+  }, [isModalOpen, externalDisplayMode, internalDisplayMode]);
+  
   const [tooltip, setTooltip] = useState({ 
     visible: false, 
-    date: '',
-    segments: [] as { name: string, value: number, color: string }[],
+    dataPoint: {} as any, 
+    segments: [] as string[],
     left: 0, 
     top: 0 
   });
   
-  // Modal state
-  const [modalData, setModalData] = useState<RevenueBySegmentDataPoint[]>([]);
-  const [modalProcessedData, setModalProcessedData] = useState<any[]>([]);
-  const [modalFilteredData, setModalFilteredData] = useState<RevenueBySegmentDataPoint[]>([]);
-  const [modalProcessedFilteredData, setModalProcessedFilteredData] = useState<any[]>([]);
-  const [modalLoading, setModalLoading] = useState<boolean>(true);
-  const [modalError, setModalError] = useState<string | null>(null);
-  const [modalTimeFilter, setModalTimeFilter] = useState<TimeFilter>(timeFilter);
-  const [isModalBrushActive, setIsModalBrushActive] = useState(false);
-  const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
-  const modalChartRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<HTMLDivElement | null>(null);
   
-  // Available segments in the dataset
-  const [availableSegments, setAvailableSegments] = useState<string[]>([]);
-  const [modalAvailableSegments, setModalAvailableSegments] = useState<string[]>([]);
+  // Process data for stacked bar chart
+  const processData = (apiData: RevenueBySegmentDataPoint[]) => {
+    if (!apiData.length) {
+      console.warn("No API data to process");
+      return { data: [], keys: [] };
+    }
+    
+    console.log("Sample data from API:", apiData.slice(0, 2));
+    
+    // Group data by date
+    const dateGroups = new Map<string, Record<string, number>>();
+    const segmentSet = new Set<string>();
+    
+    // Log all segments for debugging
+    console.log("Segments from API:", [...new Set(apiData.map(item => item.segment))]);
+    
+    // First pass: collect all data points by date
+    apiData.forEach(item => {
+      const { block_date: date, segment, protocol_revenue: revenue } = item;
+      if (!date || !segment || revenue === undefined) {
+        console.warn("Skipping invalid data point:", item);
+        return;
+      }
+      
+      segmentSet.add(segment);
+      if (!dateGroups.has(date)) dateGroups.set(date, {});
+      const dateData = dateGroups.get(date)!;
+      dateData[segment] = (dateData[segment] || 0) + revenue;
+    });
+    
+    if (dateGroups.size === 0) {
+      console.warn("No valid data points after processing");
+      return { data: [], keys: [] };
+    }
+    
+    console.log(`Grouped data into ${dateGroups.size} dates with ${segmentSet.size} segments`);
+    
+    // Calculate segment totals for sorting
+    const segmentTotals: Record<string, number> = {};
+    Array.from(segmentSet).forEach(segment => {
+      segmentTotals[segment] = 0;
+      for (const [, dateData] of dateGroups.entries()) {
+        segmentTotals[segment] += Number(dateData[segment] || 0);
+      }
+    });
+    
+    // Sort segments by total revenue
+    const sortedSegments = Object.entries(segmentTotals)
+      .sort(([, a], [, b]) => b - a)
+      .map(([segment]) => segment);
+    
+    // Log sorted segments and their colors
+    console.log("Sorted segments:", sortedSegments);
+    sortedSegments.forEach(segment => {
+      const color = segmentColors[segment] || getSegmentColor(segment);
+      console.log(`Segment ${segment} color: ${color}`);
+    });
+    
+    // Create stacked data
+    const stackedData = Array.from(dateGroups.entries())
+      .sort(([a], [b]) => {
+        // Sort by date
+        if (timeFilter === 'Q') {
+          // Handle quarterly data (Q1 2024, etc.)
+          const aMatch = a.match(/Q(\d+)\s+(\d{4})/);
+          const bMatch = b.match(/Q(\d+)\s+(\d{4})/);
+          
+          if (aMatch && bMatch) {
+            const [, aQuarter, aYear] = aMatch;
+            const [, bQuarter, bYear] = bMatch;
+            
+            // Compare years first, then quarters
+            if (aYear !== bYear) {
+              return parseInt(aYear) - parseInt(bYear);
+            }
+            return parseInt(aQuarter) - parseInt(bQuarter);
+          }
+        } else if (timeFilter === 'Y') {
+          // Handle yearly data (2023, 2024, etc.)
+          return parseInt(a) - parseInt(b);
+        }
+        
+        // Default: compare as dates
+        return new Date(a).getTime() - new Date(b).getTime();
+      })
+      .map(([date, values]) => {
+        const result: StackedDataPoint = { date };
+        
+        // Add all segments
+        sortedSegments.forEach(segment => {
+          result[segment] = values[segment] || 0;
+        });
+        
+        return result;
+      });
+    
+    return { data: stackedData, keys: sortedSegments };
+  };
   
-  // Function to fetch data
+  // Notify parent of segment changes if callback provided
+  useEffect(() => {
+    if (segmentsChanged && keys.length > 0 && data.length > 0) {
+      // Calculate segment totals for callback
+      const segmentTotals: Record<string, number> = {};
+      keys.forEach(segment => {
+        segmentTotals[segment] = 0;
+        data.forEach(d => {
+          segmentTotals[segment] += Number(d[segment] || 0);
+        });
+      });
+      
+      // Prepare and send segments data to parent
+      const segmentInfo = keys.map(segment => ({
+        segment,
+        color: segmentColors[segment] || getSegmentColor(segment),
+        revenue: segmentTotals[segment] || 0
+      }));
+      
+      // Add a console log to debug
+      console.log("Sending segment data to parent:", segmentInfo);
+      
+      segmentsChanged(segmentInfo);
+    }
+  }, [keys, data, segmentsChanged]);
+  
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      const revenueData = await fetchRevenueBySegmentData(timeFilter);
+      const apiData = await fetchRevenueBySegmentData(timeFilter);
+      console.log(`Fetched ${apiData.length} data points for timeFilter: ${timeFilter}`);
       
-      if (revenueData.length === 0) {
-        setError('No data available for this period.');
+      if (!apiData || apiData.length === 0) {
+        console.error(`No data returned for timeFilter: ${timeFilter}`);
+        setError(`No data available for ${timeFilter === 'Q' ? 'Quarterly' : timeFilter === 'Y' ? 'Yearly' : timeFilter} view`);
         setData([]);
+        setKeys([]);
         setFilteredData([]);
-        setProcessedData([]);
-        setProcessedFilteredData([]);
-        setAvailableSegments([]);
       } else {
-        // Extract unique segments
-        const segments = [...new Set(revenueData.map(d => d.segment))];
-        setAvailableSegments(segments);
+        // Modified to remove the segmentsChanged call from processData
+        const processedResult = processData(apiData);
+        console.log(`Processed data has ${processedResult.data.length} points and ${processedResult.keys.length} segments`);
         
-        // Process data for bar stack
-        const processed = processDataForBarStack(revenueData);
+        // Log the first few data points for debugging
+        if (processedResult.data.length > 0) {
+          console.log("First data point:", processedResult.data[0]);
+        }
         
-        setData(revenueData);
-        setFilteredData(revenueData);
-        setProcessedData(processed);
-        setProcessedFilteredData(processed);
-        setIsBrushActive(true);
-        setBrushDomain(null);
+        // Log the colors being assigned to each segment
+        console.log("Segment colors mapping:");
+        processedResult.keys.forEach(segment => {
+          const color = segmentColors[segment] || getSegmentColor(segment);
+          console.log(`${segment}: ${color}`);
+        });
+        
+        setData(processedResult.data);
+        setFilteredData(processedResult.data);
+        setKeys(processedResult.keys);
       }
     } catch (error) {
-      console.error('Error loading chart data:', error);
-      let message = 'Failed to load data from API.';
-      if (error instanceof Error) {
-        message = error.message || message;
-      }
-      setError(message);
+      console.error('Error fetching data:', error);
+      setError('Failed to load data');
       setData([]);
+      setKeys([]);
       setFilteredData([]);
-      setProcessedData([]);
-      setProcessedFilteredData([]);
-      setAvailableSegments([]);
     } finally {
       setLoading(false);
     }
-  }, [timeFilter]);
+  }, [timeFilter]); // Removed segmentsChanged from dependencies
   
-  // Function to fetch modal data
-  const fetchModalData = useCallback(async () => {
-    setModalLoading(true);
-    setModalError(null);
-    
-    try {
-      const revenueData = await fetchRevenueBySegmentData(modalTimeFilter);
-      
-      if (revenueData.length === 0) {
-        setModalError('No data available for this period.');
-        setModalData([]);
-        setModalFilteredData([]);
-        setModalProcessedData([]);
-        setModalProcessedFilteredData([]);
-        setModalAvailableSegments([]);
-      } else {
-        // Extract unique segments
-        const segments = [...new Set(revenueData.map(d => d.segment))];
-        setModalAvailableSegments(segments);
-        
-        // Process data for bar stack
-        const processed = processDataForBarStack(revenueData);
-        
-        setModalData(revenueData);
-        setModalFilteredData(revenueData);
-        setModalProcessedData(processed);
-        setModalProcessedFilteredData(processed);
-        setIsModalBrushActive(true);
-        setModalBrushDomain(null);
-      }
-    } catch (error) {
-      console.error('Error loading modal chart data:', error);
-      let message = 'Failed to load data.';
-      if (error instanceof Error) {
-        message = error.message || message;
-      }
-      setModalError(message);
-      setModalData([]);
-      setModalFilteredData([]);
-      setModalProcessedData([]);
-      setModalProcessedFilteredData([]);
-      setModalAvailableSegments([]);
-    } finally {
-      setModalLoading(false);
-    }
-  }, [modalTimeFilter]);
-  
-  // Fetch data on mount and when filters change
   useEffect(() => {
     fetchData();
   }, [fetchData]);
   
-  // Create and send legend data to parent component
+  // Apply brush filter
   useEffect(() => {
-    if (legendsChanged && availableSegments.length > 0) {
-      const legendsData = availableSegments.map(segment => ({
-        label: getSegmentDisplayName(segment),
-        color: getSegmentColor(segment),
-        value: data
-          .filter(d => d.segment === segment)
-          .reduce((sum, d) => sum + d.protocol_revenue, 0)
-      }));
-      
-      // Send to parent component
-      legendsChanged(legendsData);
-    }
-  }, [data, availableSegments, legendsChanged]);
-  
-  // Handle brush change
-  const handleBrushChange = useCallback((domain: any) => {
-    if (!domain) {
-      if (isBrushActive) {
-        setBrushDomain(null);
-        setIsBrushActive(false);
-      }
-      return;
-    }
+    if (!data.length) return;
     
-    const { x0, x1 } = domain;
-    const startDate = new Date(x0);
-    const endDate = new Date(x1);
-    
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return; // Ignore invalid dates
-    }
-
-    setBrushDomain([startDate, endDate]);
-    if (!isBrushActive) {
-      setIsBrushActive(true);
-    }
-  }, [isBrushActive]);
-  
-  // Handle modal brush change
-  const handleModalBrushChange = useCallback((domain: any) => {
-    if (!domain) {
-      if (isModalBrushActive) {
-        setModalBrushDomain(null);
-        setIsModalBrushActive(false);
-      }
-      return;
-    }
-    
-    const { x0, x1 } = domain;
-    const startDate = new Date(x0);
-    const endDate = new Date(x1);
-    
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return; // Ignore invalid dates
-    }
-
-    setModalBrushDomain([startDate, endDate]);
-    if (!isModalBrushActive) {
-      setIsModalBrushActive(true);
-    }
-  }, [isModalBrushActive]);
-  
-  // Apply brush domain to filter data
-  useEffect(() => {
-    if (data.length === 0) {
-      if (filteredData.length > 0) {
-        setFilteredData([]);
-        setProcessedFilteredData([]);
-      }
-      return;
-    }
-    
-    // If brush domain is null but filter is active, use full date range
-    if (!brushDomain && isBrushActive) {
+    if (!brushDomain) {
       setFilteredData(data);
-      setProcessedFilteredData(processedData);
-      return;
-    }
-    
-    // If no brush domain is set or full range is selected, show all data
-    if (!brushDomain || !isBrushActive) {
-      if (filteredData.length !== data.length) {
-        setFilteredData(data);
-        setProcessedFilteredData(processedData);
-      }
       return;
     }
     
     const [start, end] = brushDomain;
-    const startTime = start.getTime();
-    const endTime = end.getTime();
-    
     const filtered = data.filter(d => {
-      const itemDate = new Date(d.block_date).getTime();
-      return itemDate >= startTime && itemDate <= endTime;
+      const itemDate = new Date(d.date as string).getTime();
+      return itemDate >= start.getTime() && itemDate <= end.getTime();
     });
-    
-    // Process filtered data for bar stack
-    const processedFiltered = processDataForBarStack(filtered);
     
     setFilteredData(filtered.length > 0 ? filtered : data);
-    setProcessedFilteredData(processedFiltered.length > 0 ? processedFiltered : processedData);
-  }, [brushDomain, data, isBrushActive, filteredData.length, processedData]);
+  }, [brushDomain, data]);
   
-  // Apply brush domain to filter modal data
-  useEffect(() => {
-    if (modalData.length === 0) {
-      if (modalFilteredData.length > 0) {
-        setModalFilteredData([]);
-        setModalProcessedFilteredData([]);
-      }
+  // Handle brush change
+  const handleBrushChange = useCallback((domain: any) => {
+    if (!domain) {
+        setBrushDomain(null);
       return;
     }
     
-    // If brush domain is null but filter is active, use full date range
-    if (!modalBrushDomain && isModalBrushActive) {
-      setModalFilteredData(modalData);
-      setModalProcessedFilteredData(modalProcessedData);
-      return;
-    }
-    
-    // If no brush domain is set or full range is selected, show all data
-    if (!modalBrushDomain || !isModalBrushActive) {
-      if (modalFilteredData.length !== modalData.length) {
-        setModalFilteredData(modalData);
-        setModalProcessedFilteredData(modalProcessedData);
-      }
-      return;
-    }
-    
-    const [start, end] = modalBrushDomain;
-    const startTime = start.getTime();
-    const endTime = end.getTime();
-    
-    const filtered = modalData.filter(d => {
-      const itemDate = new Date(d.block_date).getTime();
-      return itemDate >= startTime && itemDate <= endTime;
-    });
-    
-    // Process filtered data for bar stack
-    const processedFiltered = processDataForBarStack(filtered);
-    
-    setModalFilteredData(filtered.length > 0 ? filtered : modalData);
-    setModalProcessedFilteredData(processedFiltered.length > 0 ? processedFiltered : modalProcessedData);
-  }, [modalBrushDomain, modalData, isModalBrushActive, modalFilteredData.length, modalProcessedData]);
-  
-  // Handle modal-related effects
-  useEffect(() => {
-    if (isModalOpen) {
-      setModalTimeFilter(timeFilter);
-      setModalData(data);
-      setModalFilteredData(filteredData.length > 0 ? filteredData : data);
-      setModalProcessedData(processedData);
-      setModalProcessedFilteredData(processedFilteredData.length > 0 ? processedFilteredData : processedData);
-      setModalBrushDomain(brushDomain);
-      setIsModalBrushActive(isBrushActive);
-      setModalAvailableSegments(availableSegments);
-      fetchModalData();
-    }
-  }, [
-    isModalOpen, timeFilter, data, filteredData, processedData, processedFilteredData,
-    brushDomain, isBrushActive, availableSegments, fetchModalData
-  ]);
-  
-  // Fetch modal data when time filter changes in modal
-  useEffect(() => {
-    if (isModalOpen) {
-      fetchModalData();
-    }
-  }, [isModalOpen, modalTimeFilter, fetchModalData]);
-  
-  // Handle modal time filter change
-  const handleModalTimeFilterChange = useCallback((newFilter: TimeFilter) => {
-    setModalTimeFilter(newFilter);
-    if (onTimeFilterChange) {
-      onTimeFilterChange(newFilter);
-    }
-  }, [onTimeFilterChange]);
-  
-  // Handle tooltip hover
-  const handleBarHover = useCallback((event: React.MouseEvent<SVGRectElement>, barData: any, date: string, segment: string) => {
-    // Get coordinates
-    const coords = localPoint(event) || { x: 0, y: 0 };
-    
-    // Create tooltip segments data
-    const segments = availableSegments.map(seg => ({
-      name: seg,
-      value: barData[seg] || 0,
-      color: getSegmentColor(seg)
-    }));
-    
-    setTooltip({
-      visible: true,
-      date,
-      segments,
-      left: coords.x,
-      top: coords.y
-    });
-  }, [availableSegments]);
-  
-  // Handle modal tooltip hover
-  const handleModalBarHover = useCallback((event: React.MouseEvent<SVGRectElement>, barData: any, date: string, segment: string) => {
-    // Get coordinates
-    const coords = localPoint(event) || { x: 0, y: 0 };
-    
-    // Create tooltip segments data
-    const segments = modalAvailableSegments.map(seg => ({
-      name: seg,
-      value: barData[seg] || 0,
-      color: getSegmentColor(seg)
-    }));
-    
-    setTooltip({
-      visible: true,
-      date,
-      segments,
-      left: coords.x,
-      top: coords.y
-    });
-  }, [modalAvailableSegments]);
+    const { x0, x1 } = domain;
+    setBrushDomain([new Date(x0), new Date(x1)]);
+  }, []);
   
   // Handle mouse leave
   const handleMouseLeave = useCallback(() => {
@@ -470,33 +317,171 @@ const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({
     }
   }, [tooltip.visible]);
   
-  // Render chart content
-  const renderChartContent = (height: number, width: number, isModal = false) => {
-    // Use modal data/filters if in modal mode, otherwise use the main data/filters
-    const activeTimeFilter = isModal ? modalTimeFilter : timeFilter;
-    const activeAvailableSegments = isModal ? modalAvailableSegments : availableSegments;
-    const activeData = isModal ? modalData : data;
-    const activeFilteredData = isModal ? modalFilteredData : filteredData;
-    const activeProcessedData = isModal ? modalProcessedData : processedData;
-    const activeProcessedFilteredData = isModal ? modalProcessedFilteredData : processedFilteredData;
-    const activeLoading = isModal ? modalLoading : loading;
-    const activeError = isModal ? modalError : error;
-    const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
-    const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
-    const activeHandleBrushChange = isModal ? handleModalBrushChange : handleBrushChange;
-    const activeHandleBarHover = isModal ? handleModalBarHover : handleBarHover;
+  // Handle mouse move for tooltips with proper positioning
+  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement | SVGElement>) => {
+    // In modal view, chartRef may be null, so we need to find the container differently
+    let container: HTMLElement | null = null;
     
-    // Show loading state
-    if (activeLoading) {
-      return <div className="flex justify-center items-center h-full"><Loader size="sm" /></div>;
+    if (isModalOpen) {
+      // When in modal, get the chart container by traversing up from the event target
+      let element = event.target as HTMLElement;
+      while (element && !element.classList.contains('overflow-hidden')) {
+        element = element.parentElement as HTMLElement;
+      }
+      container = element;
+    } else {
+      // In regular view, use the chartRef
+      container = chartRef.current;
     }
     
-    // Show error state with refresh button
-    if (activeError || activeData.length === 0) {
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Use the same margin as in chart rendering
+    const margin = { top: 5, right: 25, bottom: 30, left: 45 };
+    const innerWidth = rect.width - margin.left - margin.right;
+    
+    // Check if mouse is outside chart bounds (only check X for better usability)
+    if (mouseX < margin.left || mouseX > rect.width - margin.right) {
+      if (tooltip.visible) {
+        setTooltip(prev => ({ ...prev, visible: false }));
+      }
+      return;
+    }
+    
+    // Get bar width and calculate the bar index
+    const barStep = innerWidth / filteredData.length;
+    let index = Math.floor((mouseX - margin.left) / barStep);
+    
+    // Clamp index to available data
+    if (index < 0) index = 0;
+    if (index >= filteredData.length) index = filteredData.length - 1;
+    
+    // Get data point at this index
+    const dataPoint = filteredData[index];
+    
+    if (dataPoint) {
+      // Check if this is a new data point or if tooltip is not yet visible
+      const isNewDataPoint = !tooltip.dataPoint?.date || tooltip.dataPoint.date !== dataPoint.date;
+      
+      if (!tooltip.visible || isNewDataPoint) {
+        // Full update when showing new data point
+        setTooltip({
+          visible: true,
+          dataPoint: dataPoint,
+          segments: keys,
+          left: mouseX,
+          top: mouseY
+        });
+      } else {
+        // Only update position without changing data point
+        setTooltip(prev => ({
+          ...prev,
+          left: mouseX,
+          top: mouseY
+        }));
+      }
+    }
+  }, [filteredData, keys, tooltip.visible, tooltip.dataPoint?.date, isModalOpen]);
+  
+  // Process data for percentage view
+  const getProcessedData = useCallback(() => {
+    if (displayMode === 'absolute') {
+      return filteredData;
+    }
+    
+    // For percentage view, convert values to percentages of the total for each date
+    return filteredData.map(item => {
+      const newItem: StackedDataPoint = { date: item.date };
+      
+      // Calculate total for this date
+      const total = keys.reduce((sum, segment) => sum + (Number(item[segment]) || 0), 0);
+      
+      // Convert each segment value to percentage
+      if (total > 0) {
+        // First pass to calculate percentages
+        const percentages: Record<string, number> = {};
+        let sumPercent = 0;
+        
+        keys.forEach(segment => {
+          const value = Number(item[segment]) || 0;
+          const percent = (value / total) * 100;
+          percentages[segment] = percent;
+          sumPercent += percent;
+        });
+        
+        // Scale factor to ensure total is exactly 100%
+        const scaleFactor = sumPercent > 0 ? 100 / sumPercent : 1;
+        
+        // Apply percentages with scaling if needed
+        keys.forEach(segment => {
+          newItem[segment] = percentages[segment] * scaleFactor;
+        });
+      } else {
+        // If no data, set all to 0
+        keys.forEach(segment => {
+          newItem[segment] = 0;
+        });
+      }
+      
+      return newItem;
+    });
+  }, [displayMode, filteredData, keys]);
+
+  // Format value based on display mode
+  const formatValue = (value: number): string => {
+    if (displayMode === 'absolute') {
+      // Format currency without decimal places for whole numbers
+      if (value >= 1e9) return `$${(value / 1e9).toFixed(value % 1e9 === 0 ? 0 : 1)}B`;
+      if (value >= 1e6) return `$${(value / 1e6).toFixed(value % 1e6 === 0 ? 0 : 1)}M`;
+      if (value >= 1e3) return `$${(value / 1e3).toFixed(value % 1e3 === 0 ? 0 : 1)}K`;
+      return `$${Math.round(value)}`;
+    } else {
+      // Remove decimal places for whole percentages
+      return `${Math.round(value)}%`;
+    }
+  };
+  
+  // Format date for axis labels
+  const formatAxisLabel = (dateString: string) => {
+    try {
+      return formatAxisDate(dateString, timeFilter);
+    } catch (error) {
+      console.error(`Error formatting date: ${dateString}`, error);
+      return dateString;
+    }
+  };
+  
+  // Format date for tooltip
+  const formatTooltipDate = (dateString: string) => {
+    try {
+      return formatDate(dateString, timeFilter);
+    } catch (error) {
+      console.error(`Error formatting date: ${dateString}`, error);
+      return dateString;
+    }
+  };
+  
+  // Process data for brush component
+  const processDataForBrush = (dataPoints: StackedDataPoint[]) => {
+    return dataPoints.map(point => ({
+      date: point.date as string,
+      value: keys.reduce((sum, key) => sum + (Number(point[key]) || 0), 0)
+    }));
+  };
+  
+  // Render chart content
+  const renderChart = () => {
+    if (loading) return <div className="flex justify-center items-center h-full w-full"><Loader size="sm" /></div>;
+    
+    if (error || !filteredData.length) {
       return (
-        <div className="flex flex-col justify-center items-center h-full">
-          <div className="text-gray-400/80 text-xs mb-2">{activeError || 'No data available'}</div>
-          <ButtonSecondary onClick={isModal ? fetchModalData : fetchData}>
+        <div className="flex flex-col justify-center items-center h-full w-full">
+          <div className="text-gray-400/80 text-xs mb-2">{error || 'No data available'}</div>
+          <ButtonSecondary onClick={fetchData}>
             <div className="flex items-center gap-1.5">
               <RefreshIcon className="w-3.5 h-3.5" />
               <span>Refresh</span>
@@ -506,164 +491,162 @@ const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({
       );
     }
     
-    // Get displayed data with filter
-    const displayData = activeIsBrushActive ? activeProcessedFilteredData : activeProcessedData;
+    const processedData = getProcessedData();
+    const activeBrushData = processDataForBrush(data);
+    
+    // Define consistent margins for chart and brush to ensure alignment
+    const chartMargin = { top: 10, right: 15, bottom: 30, left: 45 };
+    const brushMargin = { top: 5, right: 15, bottom: 10, left: 45 };
     
     return (
-      <div className="flex flex-col h-full">
-        {tooltip.visible && tooltip.date && (
+      <div className="h-full w-full relative">
+        {/* Only render tooltip here if NOT in modal view to prevent duplicates */}
+        {tooltip.visible && tooltip.dataPoint && !isModalOpen && (
           <ChartTooltip
-            title={formatDate(tooltip.date, activeTimeFilter)}
-            items={tooltip.segments.map(segment => ({
-              color: segment.color,
-              label: getSegmentDisplayName(segment.name),
-              value: formatCurrency(segment.value),
-              shape: 'square'
-            }))}
+            title={formatTooltipDate(tooltip.dataPoint.date as string)}
+            items={
+              tooltip.segments
+                .filter(segment => Number(tooltip.dataPoint[segment] || 0) > 0)
+                .filter((segment, index, self) => self.indexOf(segment) === index)
+                .map((segment: string) => {
+                  const color = segmentColors[segment] || getSegmentColor(segment);
+                  
+                  return {
+                    color,
+                    label: segment,
+                    value: formatValue(Number(tooltip.dataPoint[segment] || 0)),
+                    shape: 'square' as const
+                  };
+                })
+            }
             top={tooltip.top}
             left={tooltip.left}
-            isModal={isModal}
           />
         )}
-        
-        {/* Main chart */}
         <div className="h-[85%] w-full overflow-hidden relative"
-          ref={isModal ? modalChartRef : chartRef}
+          ref={isModalOpen ? null : chartRef} 
+          onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
           <ParentSize>
             {({ width, height }) => {
-              if (width <= 0 || height <= 0) return null; 
+              const margin = chartMargin;
+              const xMax = width - margin.left - margin.right;
+              const yMax = height - margin.top - margin.bottom;
               
-              const margin = { top: 10, right: 45, bottom: 30, left: 60 };
-              const innerWidth = width - margin.left - margin.right;
-              const innerHeight = height - margin.top - margin.bottom;
-              if (innerWidth <= 0 || innerHeight <= 0) return null;
-              
-              // Create date scale for x-axis
+              // X scale for dates
               const xScale = scaleBand<string>({
-                domain: displayData.map(d => d.date),
-                range: [0, innerWidth],
-                padding: 0.2
+                domain: processedData.map(d => d.date as string),
+                padding: 0.2,
+                range: [0, xMax]
               });
               
-              // Get keys for stacked bars
-              const keys = activeAvailableSegments;
+              // Debug axis labels
+              console.log("X-axis domain values:", xScale.domain());
               
-              // Create color scale for segments
+              // Y scale for values
+              const yScale = scaleLinear<number>({
+                domain: displayMode === 'percent' 
+                  ? [0, 100] // Fixed domain for percentage view
+                  : [0, Math.max(...processedData.map(d => 
+                      keys.reduce((sum, k) => sum + (Number(d[k]) || 0), 0)
+                    )) * 1.1], // Add 10% padding
+                nice: true,
+                range: [yMax, 0]
+              });
+              
+              // Color scale for segments
               const colorScale = scaleOrdinal<string, string>({
                 domain: keys,
-                range: keys.map(getSegmentColor)
-              });
-              
-              // Find max value for y-axis scale
-              const maxValue = Math.max(
-                ...displayData.map(d => 
-                  keys.reduce((sum, key) => sum + (Number(d[key]) || 0), 0)
-                )
-              );
-              
-              // Create y-scale
-              const yScale = scaleLinear<number>({
-                domain: [0, maxValue * 1.1], // Add 10% padding
-                range: [innerHeight, 0],
-                nice: true
+                range: keys.map(segment => segmentColors[segment] || getSegmentColor(segment))
               });
               
               return (
+                <>
                 <svg width={width} height={height}>
                   <Group left={margin.left} top={margin.top}>
-                    {/* Grid lines */}
                     <GridRows
                       scale={yScale}
-                      width={innerWidth}
-                      height={innerHeight}
-                      stroke="#1f2937"
+                      width={xMax}
+                      height={yMax}
+                      stroke={grid}
                       strokeOpacity={0.5}
                       strokeDasharray="2,3"
-                      numTicks={5}
+                      numTicks={4}
                     />
                     
-                    {/* Bar Stack */}
                     <BarStack
-                      data={displayData}
+                        data={processedData}
                       keys={keys}
-                      x={(d) => d.date}
+                        x={d => d.date as string}
                       xScale={xScale}
                       yScale={yScale}
-                      color={colorScale}
-                    >
-                      {(barStacks) => 
-                        barStacks.map((barStack) => 
-                          barStack.bars.map((bar) => (
+                        color={segment => segmentColors[segment] || getSegmentColor(segment)}
+                      >
+                        {barStacks => {
+                          return barStacks.map(barStack => {
+                            return barStack.bars.map(bar => {
+                              if (bar.height <= 0) return null;
+                              
+                              // Check if this bar's date matches the tooltip date for highlighting
+                              const isHighlighted = tooltip.visible && tooltip.dataPoint?.date === processedData[bar.index].date;
+                              
+                              return (
                             <rect
                               key={`bar-stack-${barStack.index}-${bar.index}`}
                               x={bar.x}
                               y={bar.y}
                               height={bar.height}
                               width={bar.width}
-                              fill={bar.color}
-                              opacity={0.9}
+                                  fill={segmentColors[barStack.key] || getSegmentColor(barStack.key)}
+                                  opacity={isHighlighted ? 1 : 0.75}
                               rx={2}
-                              onMouseMove={(event) => {
-                                if (barStack.index >= 0 && barStack.index < displayData.length) {
-                                  activeHandleBarHover(
-                                    event, 
-                                    displayData[barStack.index], 
-                                    displayData[barStack.index].date, 
-                                    bar.key
-                                  );
-                                }
-                              }}
-                              onMouseLeave={handleMouseLeave}
-                            />
-                          ))
-                        )
-                      }
+                                />
+                              );
+                            }).filter(Boolean);
+                          });
+                        }}
                     </BarStack>
                     
-                    {/* X-axis */}
                     <AxisBottom 
-                      top={innerHeight}
+                        top={yMax}
                       scale={xScale}
-                      tickFormat={(date) => {
-                        const d = new Date(date as string);
-                        // Custom formatting based on active time filter
-                        switch(activeTimeFilter) {
-                          case 'Y': return d.getFullYear().toString();
-                          case 'Q': return `Q${Math.floor(d.getMonth() / 3) + 1}`;
-                          case 'M': return d.toLocaleDateString('en-US', { month: 'short' });
-                          case 'W': 
-                          default: return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        }
-                      }}
-                      stroke="#374151"
+                        tickFormat={formatAxisLabel}
+                        stroke={axisLines}
                       strokeWidth={0.5}
                       tickStroke="transparent"
                       tickLength={0}
                       hideZero={true}
-                      numTicks={Math.min(10, displayData.length)}
                       tickLabelProps={() => ({
-                        fill: '#6b7280',
+                          fill: tickLabels,
                         fontSize: 11,
                         fontWeight: 300,
                         letterSpacing: '0.05em',
                         textAnchor: 'middle',
                         dy: '0.5em'
                       })}
-                    />
-                    
-                    {/* Y-axis */}
+                        tickValues={
+                          // Use all data points for Q and Y views (typically fewer points)
+                          (timeFilter === 'Q' || timeFilter === 'Y') 
+                            ? processedData.map(d => d.date as string)
+                            // For other views, limit the number of ticks shown
+                            : processedData.length > 10 
+                              ? processedData.filter((_, i) => 
+                                  i % Math.ceil(processedData.length / 10) === 0
+                                ).map(d => d.date as string) 
+                              : processedData.map(d => d.date as string)
+                        }
+                      />
+                      
                     <AxisLeft 
                       scale={yScale}
-                      stroke="#374151" 
+                        stroke={axisLines}
                       strokeWidth={0.5} 
                       tickStroke="transparent" 
                       tickLength={0} 
-                      numTicks={5}
-                      tickFormat={(value) => formatCurrency(value as number)}
+                        tickFormat={(value) => formatValue(value as number)}
                       tickLabelProps={() => ({ 
-                        fill: '#6b7280', 
+                          fill: tickLabels,
                         fontSize: 11, 
                         fontWeight: 300, 
                         letterSpacing: '0.05em',
@@ -671,34 +654,26 @@ const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({
                         dx: '-0.6em', 
                         dy: '0.25em' 
                       })}
+                      numTicks={4}
                     />
                   </Group>
                 </svg>
+                </>
               );
             }}
           </ParentSize>
         </div>
         
-        {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
           <BrushTimeScale
-            data={activeData}
-            isModal={isModal}
-            activeBrushDomain={activeBrushDomain}
-            onBrushChange={activeHandleBrushChange}
-            onClearBrush={() => {
-              if (isModal) {
-                setModalBrushDomain(null);
-                setIsModalBrushActive(false);
-              } else {
-                setBrushDomain(null);
-                setIsBrushActive(false);
-              }
-            }}
-            getDate={(d) => d.block_date}
-            getValue={(d) => d.protocol_revenue}
+            data={activeBrushData}
+            activeBrushDomain={brushDomain}
+            onBrushChange={handleBrushChange}
+            onClearBrush={() => setBrushDomain(null)}
+            getDate={d => d.date as string}
+            getValue={d => d.value as number}
             lineColor={segmentColors.DeFi}
-            margin={{ top: 5, right: 45, bottom: 10, left: 60 }}
+            margin={brushMargin}
           />
         </div>
       </div>
@@ -706,42 +681,20 @@ const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({
   };
   
   return (
-    <div className="h-full w-full relative">
-      {/* Add time filter at top right corner */}
-      {!isModalOpen && (
-        <div className="absolute right-0 top-0 z-10">
-          <TimeFilterSelector
-            value={timeFilter}
-            onChange={(val) => {
-              if (onTimeFilterChange) {
-                onTimeFilterChange(val as TimeFilter);
-              }
-            }}
-            options={[
-              { value: 'W', label: 'W' },
-              { value: 'M', label: 'M' },
-              { value: 'Q', label: 'Q' },
-              { value: 'Y', label: 'Y' }
-            ]}
-          />
-        </div>
-      )}
+    <>
+      {renderChart()}
       
-      {renderChartContent(0, 0)}
-      
-      {/* Modal */}
+      {isModalOpen && (
       <Modal 
         isOpen={isModalOpen} 
         onClose={onModalClose} 
-        title="Revenue by Segment"
-        subtitle="Protocol revenue breakdown by segment over time"
+          title="Protocol Revenue by Segment"
+          subtitle="Stacked view of protocol revenue across segments by time period"
       >
-        {/* Filters */}
-        <div className="flex items-center justify-between pl-1 py-0 mb-3">
-          <div className="flex space-x-4 items-center">
+          <div className="flex pl-1 py-0 mb-3">
             <TimeFilterSelector
-              value={modalTimeFilter}
-              onChange={(val) => handleModalTimeFilterChange(val as TimeFilter)}
+              value={timeFilter}
+              onChange={onTimeFilterChange || (() => {})}
               options={[
                 { value: 'W', label: 'W' },
                 { value: 'M', label: 'M' },
@@ -749,59 +702,59 @@ const RevenueBySegmentChart: React.FC<RevenueBySegmentChartProps> = ({
                 { value: 'Y', label: 'Y' }
               ]}
             />
-            <DisplayModeFilter 
-              mode={displayMode} 
-              onChange={(newMode: DisplayMode) => {
-                // Handle display mode change if needed
-              }}
-            />
-          </div>
+            
+              <DisplayModeFilter mode={displayMode} onChange={handleDisplayModeChange} />
+            
         </div>
         
-        {/* Horizontal line */}
         <div className="h-px bg-gray-900 w-full mb-3"></div>
         
         <div className="h-[60vh]">
-          {/* Chart with legends in modal */}
           <div className="flex h-full">
-            {/* Chart area - 90% width */}
-            <div className="w-[90%] h-full pr-3 border-r border-gray-900">
-              {renderChartContent(0, 0, true)}
+              <div className="w-[90%] h-full pr-3 border-r border-gray-900 relative">
+                {/* Add the tooltip at this level for the modal view */}
+                {isModalOpen && tooltip.visible && tooltip.dataPoint && (
+                  <ChartTooltip
+                    title={formatTooltipDate(tooltip.dataPoint.date as string)}
+                    items={
+                      tooltip.segments
+                        .filter(segment => Number(tooltip.dataPoint[segment] || 0) > 0)
+                        .filter((segment, index, self) => self.indexOf(segment) === index)
+                        .map((segment: string) => {
+                          const color = segmentColors[segment] || getSegmentColor(segment);
+                          
+                          return {
+                            color,
+                            label: segment,
+                            value: formatValue(Number(tooltip.dataPoint[segment] || 0)),
+                            shape: 'square' as const
+                          };
+                        })
+                    }
+                    top={tooltip.top}
+                    left={tooltip.left}
+                    isModal={true}
+                  />
+                )}
+                {renderChart()}
             </div>
             
-            {/* Legend area - 10% width */}
-            <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-              <div className="text-[10px] text-gray-400 mb-2">SEGMENTS</div>
-              {modalLoading ? (
-                // Show loading state
-                <>
-                  <LegendItem label="Loading..." color="#60a5fa" isLoading={true} />
-                  <LegendItem label="Loading..." color="#a78bfa" isLoading={true} />
-                  <LegendItem label="Loading..." color="#34d399" isLoading={true} />
-                </>
-              ) : (
-                // Create legend items array
                 <div className="flex flex-col gap-1 overflow-y-auto max-h-[500px] pr-1">
-                  {modalAvailableSegments.map((segment) => (
-                    <LegendItem
-                      key={segment}
-                      label={getSegmentDisplayName(segment)}
-                      color={getSegmentColor(segment)}
-                      shape="square"
-                      tooltipText={formatCurrency(
-                        modalData
-                          .filter(d => d.segment === segment)
-                          .reduce((sum, d) => sum + d.protocol_revenue, 0)
-                      )}
-                    />
-                  ))}
-                </div>
-              )}
+                  <ScrollableLegend
+                    
+                    items={keys.map(segment => ({
+                      id: segment,
+                      label: segment,
+                      color: segmentColors[segment] || getSegmentColor(segment),
+                      
+                    }))}
+                  />
             </div>
           </div>
         </div>
       </Modal>
-    </div>
+      )}
+    </>
   );
 };
 

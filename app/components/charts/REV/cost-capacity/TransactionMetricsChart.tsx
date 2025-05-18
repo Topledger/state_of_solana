@@ -17,6 +17,7 @@ import DisplayModeFilter, { DisplayMode } from '../../../shared/filters/DisplayM
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import { TimeFilter, CurrencyType } from '../../../../api/REV/cost-capacity';
 import { TransactionDataPoint, fetchTransactionsData } from '../../../../api/REV/cost-capacity/transactionsData';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -52,15 +53,73 @@ interface TransactionMetricsChartProps {
   chartType?: ChartType;
 }
 
-// Chart colors
+// Define chart colors
 export const transactionMetricsColors = {
-  total_vote_transactions: '#60a5fa', // blue
-  total_non_vote_transactions: '#a78bfa', // purple
-  successful_transactions_perc: '#34d399', // green
-  successful_non_vote_transactions_perc: '#f97316', // orange
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  total_vote_transactions: colors[0], // blue
+  total_non_vote_transactions: colors[1], // purple 
+  successful_transactions_perc: colors[2], // green
+  successful_non_vote_transactions_perc: colors[3], // orange
+  total_tps: colors[0], // blue
+  success_tps: colors[2], // green
+  failed_tps: colors[4], // red
+  real_tps: colors[1], // purple
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+};
+
+// Sort metrics by total value and assign colors
+const getMetricColorMap = (data: TransactionDataPoint[], chartType: ChartType) => {
+  if (data.length === 0) return transactionMetricsColors;
+  
+  // Define what metrics to include based on chart type
+  let metrics: string[] = [];
+  
+  if (chartType === 'volume' || chartType === 'all' || chartType === 'success-volume') {
+    metrics.push('total_vote_transactions', 'total_non_vote_transactions');
+  }
+  
+  if (chartType === 'success-rate' || chartType === 'all' || chartType === 'success-volume') {
+    metrics.push('successful_transactions_perc', 'successful_non_vote_transactions_perc');
+  }
+  
+  if (chartType === 'tps') {
+    metrics.push('total_tps', 'success_tps', 'failed_tps', 'real_tps');
+  }
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Number(d[metric as keyof typeof d]) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    colors[0], // blue
+    colors[1], // purple
+    colors[2], // green
+    colors[3], // orange
+    colors[4], // red
+    colors[5], // yellow
+  ];
+  
+  // Assign colors to metrics based on their value
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
+  return {
+    ...transactionMetricsColors,
+    ...colorMap,
+    // Preserve grid and axis colors
+    grid: transactionMetricsColors.grid,
+    axisLines: transactionMetricsColors.axisLines,
+    tickLabels: transactionMetricsColors.tickLabels
+  };
 };
 
 const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
@@ -387,55 +446,158 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
 
   }, [modalBrushDomain, modalData, isModalBrushActive]);
 
-  // Handle mouse move and leave events for tooltip
-  const handleMouseMove = useCallback((event: React.MouseEvent, isModal = false) => {
-    const targetData = isModal ? modalFilteredData : filteredData;
-    if (!targetData || targetData.length === 0) return;
-    
-    const containerRef = isModal ? modalChartRef : chartRef;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    const margin = { top: 5, right: 50, bottom: 30, left: 50 };
-    
-    // Calculate mouse position relative to chart
-    const chartWidth = rect.width - margin.left - margin.right;
-    
-    // Find closest data point
-    const xRatio = (mouseX - margin.left) / chartWidth;
-    const index = Math.min(
-      Math.max(0, Math.floor(xRatio * targetData.length)),
-      targetData.length - 1
-    );
-    const dataPoint = targetData[index];
-    
-    setTooltip({
-      visible: true,
-      dataPoint,
-      left: mouseX,
-      top: mouseY
-    });
-  }, [filteredData, modalFilteredData]);
-
-  const handleMouseLeave = useCallback(() => {
-    setTooltip(prev => ({ ...prev, visible: false }));
-  }, []);
-
-  // Handle time filter change in modal
-  const handleModalTimeFilterChange = useCallback((newTimeFilter: TimeFilter) => {
-    setModalTimeFilter(newTimeFilter);
-    // If there's a parent callback, call it too
-    if (onTimeFilterChange) {
-      onTimeFilterChange(newTimeFilter);
+  // Tooltip event handlers
+  const handleMouseMove = (event: React.MouseEvent, isModal = false) => {
+    try {
+      if (!data || data.length === 0 || !chartRef.current) return;
+      
+      const chartElement = isModal ? modalChartRef.current : chartRef.current;
+      if (!chartElement) return;
+      
+      const chartRect = chartElement.getBoundingClientRect();
+      const mouseX = event.clientX - chartRect.left;
+      const mouseY = event.clientY - chartRect.top;
+      
+      // Use active filtered data for interactive elements
+      const activeData = isModal 
+        ? (isModalBrushActive ? modalFilteredData : modalData) 
+        : (isBrushActive ? filteredData : data);
+      
+      if (activeData.length === 0) return;
+      
+      // Calculate position within chart
+      const margin = { top: 5, right: 25, bottom: 30, left: 45 };
+      const innerWidth = chartRect.width - margin.left - margin.right;
+      
+      // Number of data points visible
+      const dataPointWidth = innerWidth / activeData.length;
+      
+      // Find closest data point to mouse position
+      const dataIndex = Math.min(
+        Math.max(0, Math.floor((mouseX - margin.left) / dataPointWidth)),
+        activeData.length - 1
+      );
+      
+      if (dataIndex < 0 || dataIndex >= activeData.length) return;
+      
+      // Get data point at this index
+      const dataPoint = activeData[dataIndex];
+      
+      // Set tooltip data and position
+      setTooltip({
+        visible: true,
+        dataPoint: dataPoint,
+        top: mouseY,
+        left: mouseX + 20 // Offset to the right of cursor
+      });
+    } catch (error) {
+      console.error('Error handling mouse movement:', error);
     }
-  }, [onTimeFilterChange]);
+  };
+  
+  // Handle mouse leave event for tooltip
+  const handleMouseLeave = () => {
+    setTooltip(prev => ({ ...prev, visible: false }));
+  };
 
-  // Handle display mode change in modal
-  const handleModalDisplayModeChange = useCallback((newMode: DisplayMode) => {
-    setModalDisplayMode(newMode);
-  }, []);
+  // Function to format tooltip items based on chart type
+  const getTooltipItems = (dataPoint: TransactionDataPoint) => {
+    const items: Array<{
+      color: string;
+      label: string;
+      value: string;
+      shape: 'square' | 'circle';
+    }> = [];
+    
+    // Add appropriate metrics based on chart type
+    if (chartType === 'volume') {
+      items.push(
+        {
+          color: transactionMetricsColors.total_vote_transactions,
+          label: 'Vote Transactions',
+          value: formatLargeNumber(dataPoint.total_vote_transactions),
+          shape: 'square' as const
+        },
+        {
+          color: transactionMetricsColors.total_non_vote_transactions,
+          label: 'Non-Vote Transactions',
+          value: formatLargeNumber(dataPoint.total_non_vote_transactions),
+          shape: 'square' as const
+        }
+      );
+    } else if (chartType === 'success-rate') {
+      items.push(
+        {
+          color: transactionMetricsColors.successful_transactions_perc,
+          label: 'Success Rate',
+          value: formatPercentage(dataPoint.successful_transactions_perc),
+          shape: 'circle' as const
+        },
+        {
+          color: transactionMetricsColors.successful_non_vote_transactions_perc,
+          label: 'Non-Vote Success Rate',
+          value: formatPercentage(dataPoint.successful_non_vote_transactions_perc),
+          shape: 'circle' as const
+        }
+      );
+    } else if (chartType === 'success-volume') {
+      items.push(
+        {
+          color: transactionMetricsColors.successful_transactions_perc,
+          label: 'Success Rate',
+          value: formatPercentage(dataPoint.successful_transactions_perc),
+          shape: 'circle' as const
+        },
+        {
+          color: transactionMetricsColors.successful_non_vote_transactions_perc,
+          label: 'Non-Vote Success Rate',
+          value: formatPercentage(dataPoint.successful_non_vote_transactions_perc),
+          shape: 'circle' as const
+        },
+        {
+          color: transactionMetricsColors.total_vote_transactions,
+          label: 'Vote Transactions',
+          value: formatLargeNumber(dataPoint.total_vote_transactions),
+          shape: 'square' as const
+        },
+        {
+          color: transactionMetricsColors.total_non_vote_transactions,
+          label: 'Non-Vote Transactions',
+          value: formatLargeNumber(dataPoint.total_non_vote_transactions),
+          shape: 'square' as const
+        }
+      );
+    } else if (chartType === 'tps') {
+      items.push(
+        {
+          color: transactionMetricsColors.total_tps,
+          label: 'Total TPS',
+          value: formatLargeNumber(dataPoint.total_tps),
+          shape: 'square' as const
+        },
+        {
+          color: transactionMetricsColors.success_tps,
+          label: 'Success TPS',
+          value: formatLargeNumber(dataPoint.success_tps),
+          shape: 'square' as const
+        },
+        {
+          color: transactionMetricsColors.failed_tps,
+          label: 'Failed TPS',
+          value: formatLargeNumber(dataPoint.failed_tps),
+          shape: 'square' as const
+        },
+        {
+          color: transactionMetricsColors.real_tps,
+          label: 'Real TPS',
+          value: formatLargeNumber(dataPoint.real_tps),
+          shape: 'square' as const
+        }
+      );
+    }
+    
+    return items;
+  };
 
   // Format large numbers with appropriate suffixes
   const formatLargeNumber = (value: number): string => {
@@ -460,6 +622,20 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // Handle time filter change in modal
+  const handleModalTimeFilterChange = (newTimeFilter: TimeFilter) => {
+    setModalTimeFilter(newTimeFilter);
+    // If there's a parent callback, call it too
+    if (onTimeFilterChange) {
+      onTimeFilterChange(newTimeFilter);
+    }
+  };
+
+  // Handle display mode change in modal
+  const handleModalDisplayModeChange = (newMode: DisplayMode) => {
+    setModalDisplayMode(newMode);
+  };
+
   // Render chart content
   const renderChartContent = (height: number, width: number, isModal = false) => {
     // Use modal data/filters if in modal mode, otherwise use the main data/filters
@@ -475,6 +651,9 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
     const activeClearBrush = isModal 
       ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
       : () => { setBrushDomain(null); setIsBrushActive(false); };
+    
+    // Get dynamic color map based on data values
+    const colorMap = getMetricColorMap(activeFilteredData, chartType);
     
     // Show loading state
     if (activeLoading) {
@@ -596,7 +775,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                       scale={volumeScale}
                       width={innerWidth}
                       height={innerHeight}
-                      stroke={transactionMetricsColors.grid}
+                      stroke={colorMap.grid}
                       strokeOpacity={0.6}
                       strokeDasharray="2,3"
                       tickValues={showVolumeMetrics ? volumeTickValues : 
@@ -612,7 +791,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => volumeScale(d.total_vote_transactions)}
-                          stroke={transactionMetricsColors.total_vote_transactions}
+                          stroke={colorMap.total_vote_transactions}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -622,7 +801,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => volumeScale(d.total_non_vote_transactions)}
-                          stroke={transactionMetricsColors.total_non_vote_transactions}
+                          stroke={colorMap.total_non_vote_transactions}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -637,7 +816,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => percentScale(d.successful_transactions_perc)}
-                          stroke={transactionMetricsColors.successful_transactions_perc}
+                          stroke={colorMap.successful_transactions_perc}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -647,7 +826,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => percentScale(d.successful_non_vote_transactions_perc)}
-                          stroke={transactionMetricsColors.successful_non_vote_transactions_perc}
+                          stroke={colorMap.successful_non_vote_transactions_perc}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -662,7 +841,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => tpsScale(d.total_tps)}
-                          stroke="#60a5fa" // blue
+                          stroke={colorMap.total_tps}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -672,7 +851,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => tpsScale(d.success_tps)}
-                          stroke="#34d399" // green
+                          stroke={colorMap.success_tps}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -682,7 +861,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => tpsScale(d.failed_tps)}
-                          stroke="#f43f5e" // red
+                          stroke={colorMap.failed_tps}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -692,7 +871,7 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           data={displayData}
                           x={d => dateScale(new Date(d.date))}
                           y={d => tpsScale(d.real_tps)}
-                          stroke="#a78bfa" // purple
+                          stroke={colorMap.real_tps}
                           strokeWidth={1.5}
                           curve={curveMonotoneX}
                         />
@@ -705,13 +884,13 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                         scale={volumeScale}
                         left={0}
                         tickFormat={(value) => formatLargeNumber(value as number)}
-                        stroke={transactionMetricsColors.axisLines}
+                        stroke={colorMap.axisLines}
                         strokeWidth={0.5}
                         tickStroke="transparent"
                         tickLength={0}
                         numTicks={5}
                         tickLabelProps={() => ({
-                          fill: transactionMetricsColors.tickLabels,
+                          fill: colorMap.tickLabels,
                           fontSize: 11,
                           fontWeight: 300,
                           letterSpacing: '0.05em',
@@ -728,13 +907,13 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                         scale={percentScale}
                         left={innerWidth}
                         tickFormat={(value) => `${value as number}%`}
-                        stroke={transactionMetricsColors.axisLines}
+                        stroke={colorMap.axisLines}
                         strokeWidth={0.5}
                         tickStroke="transparent"
                         tickLength={0}
                         numTicks={5}
                         tickLabelProps={() => ({
-                          fill: transactionMetricsColors.tickLabels,
+                          fill: colorMap.tickLabels,
                           fontSize: 11,
                           fontWeight: 300,
                           letterSpacing: '0.05em',
@@ -751,13 +930,13 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                         scale={tpsScale}
                         left={0}
                         tickFormat={(value) => formatLargeNumber(value as number)}
-                        stroke={transactionMetricsColors.axisLines}
+                        stroke={colorMap.axisLines}
                         strokeWidth={0.5}
                         tickStroke="transparent"
                         tickLength={0}
                         numTicks={5}
                         tickLabelProps={() => ({
-                          fill: transactionMetricsColors.tickLabels,
+                          fill: colorMap.tickLabels,
                           fontSize: 11,
                           fontWeight: 300,
                           letterSpacing: '0.05em',
@@ -784,14 +963,14 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
                           default: return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                         }
                       }}
-                      stroke={transactionMetricsColors.axisLines}
+                      stroke={colorMap.axisLines}
                       strokeWidth={0.5}
                       tickStroke="transparent"
                       tickLength={0}
                       hideZero={true}
                       numTicks={Math.min(5, displayData.length)}
                       tickLabelProps={(value, index) => ({
-                        fill: transactionMetricsColors.tickLabels,
+                        fill: colorMap.tickLabels,
                         fontSize: 11,
                         fontWeight: 300,
                         letterSpacing: '0.05em',
@@ -822,111 +1001,12 @@ const TransactionMetricsChart: React.FC<TransactionMetricsChartProps> = ({
               // Default to total transactions for volume
               return d.total_vote_transactions + d.total_non_vote_transactions;
             }}
-            lineColor={transactionMetricsColors.total_vote_transactions}
+            lineColor={colorMap.total_vote_transactions}
             margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
           />
         </div>
       </div>
     );
-  };
-
-  // Helper function to get tooltip items based on chart type
-  const getTooltipItems = (dataPoint: TransactionDataPoint) => {
-    const items = [];
-    
-    if (chartType === 'volume' || chartType === 'all') {
-      items.push(
-        {
-          color: transactionMetricsColors.total_vote_transactions,
-          label: 'Vote Transactions',
-          value: formatLargeNumber(dataPoint.total_vote_transactions),
-          shape: 'square' as const
-        },
-        {
-          color: transactionMetricsColors.total_non_vote_transactions,
-          label: 'Non-Vote Transactions',
-          value: formatLargeNumber(dataPoint.total_non_vote_transactions),
-          shape: 'square' as const
-        }
-      );
-    }
-    
-    if (chartType === 'success-rate' || chartType === 'all') {
-      items.push(
-        {
-          color: transactionMetricsColors.successful_transactions_perc,
-          label: 'Success Rate',
-          value: formatPercentage(dataPoint.successful_transactions_perc),
-          shape: 'circle' as const
-        },
-        {
-          color: transactionMetricsColors.successful_non_vote_transactions_perc,
-          label: 'Non-Vote Success Rate',
-          value: formatPercentage(dataPoint.successful_non_vote_transactions_perc),
-          shape: 'circle' as const
-        }
-      );
-    }
-    
-    if (chartType === 'success-volume') {
-      items.push(
-        {
-          color: transactionMetricsColors.successful_transactions_perc,
-          label: 'Success Rate',
-          value: formatPercentage(dataPoint.successful_transactions_perc),
-          shape: 'circle' as const
-        },
-        {
-          color: transactionMetricsColors.successful_non_vote_transactions_perc,
-          label: 'Non-Vote Success Rate',
-          value: formatPercentage(dataPoint.successful_non_vote_transactions_perc),
-          shape: 'circle' as const
-        },
-        {
-          color: transactionMetricsColors.total_vote_transactions,
-          label: 'Vote Transactions',
-          value: formatLargeNumber(dataPoint.total_vote_transactions),
-          shape: 'square' as const
-        },
-        {
-          color: transactionMetricsColors.total_non_vote_transactions,
-          label: 'Non-Vote Transactions',
-          value: formatLargeNumber(dataPoint.total_non_vote_transactions),
-          shape: 'square' as const
-        }
-      );
-    }
-    
-    if (chartType === 'tps') {
-      items.push(
-        {
-          color: '#60a5fa', // blue
-          label: 'Total TPS',
-          value: formatLargeNumber(dataPoint.total_tps),
-          shape: 'square' as const
-        },
-        {
-          color: '#34d399', // green
-          label: 'Success TPS',
-          value: formatLargeNumber(dataPoint.success_tps),
-          shape: 'square' as const
-        },
-        {
-          color: '#f43f5e', // red
-          label: 'Failed TPS',
-          value: formatLargeNumber(dataPoint.failed_tps),
-          shape: 'square' as const
-        },
-        {
-          color: '#a78bfa', // purple
-          label: 'Real TPS',
-          value: formatLargeNumber(dataPoint.real_tps),
-          shape: 'square' as const
-        }
-      );
-    }
-    
-    return items;
   };
 
   return (

@@ -26,24 +26,7 @@ const colors = [
 ];
 
 // Memecoin color palette - same as in MemecoinVolumeChart
-const memecoinColors = [
-  '#f59e0b', // amber-500
-  '#fbbf24', // amber-400
-  '#fcd34d', // amber-300
-  '#d97706', // amber-600
-  '#92400e', // amber-800
-  '#78350f', // amber-900
-  '#b45309', // amber-700
-  '#a16207', // yellow-800
-  '#ca8a04', // yellow-600
-  '#eab308', // yellow-500
-  '#facc15', // yellow-400
-  '#fef08a', // yellow-200
-  '#854d0e', // yellow-900
-  '#713f12', // yellow-950
-  '#f97316', // orange-500
-  '#ea580c', // orange-600
-];
+const memecoinColors = colors.slice(0, 17);
 
 export default function DexVolumePage() {
   const [timeFilter, setTimeFilter] = useState<VolumeTimeFilter>('W');

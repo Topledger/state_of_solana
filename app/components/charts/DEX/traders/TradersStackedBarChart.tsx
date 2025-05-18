@@ -14,6 +14,7 @@ import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
 import DataTypeFilter, { DataType } from '../../../shared/filters/DataTypeFilter';
+import { blue, green, grid, axisLines, tickLabels, transactionCategoryColors, colors } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -35,28 +36,21 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
   );
 };
 
-// Colors for transaction categories
-const categoryColors: { [key: string]: string } = {
-  "1-3 transactions": "#60a5fa", // blue
-  "4-5 transactions": "#34d399", // green
-  "6-10 transactions": "#a78bfa", // purple
-  "11-100 transactions": "#f97316", // orange
-  "101-1000 transactions": "#f43f5e", // rose
-  ">1000 transactions": "#facc15" // yellow
-};
+// Create a properly typed categoryColors object from transactionCategoryColors
+const categoryColors: Record<string, string> = { ...transactionCategoryColors };
 
 // Chart colors for styling
 export const tradersStackedBarChartColors = {
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
 };
 
 // Export a function to get chart colors for external use
 export const getTradersStackedBarChartColors = () => {
   return {
-    primary: '#60a5fa', // blue
-    secondary: '#34d399', // green 
+    primary: colors[0], // blue (1st color)
+    secondary: colors[2], // green (3rd color)
   };
 };
 
@@ -78,6 +72,9 @@ export default function TradersStackedBarChart({
   const [signersData, setSignersData] = useState<StackedBarDataPoint[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Color mapping state - maps category names to colors based on values
+  const [categoryColorMap, setCategoryColorMap] = useState<Record<string, string>>({});
   
   // Filtering and brushing states
   const [filteredVolumeData, setFilteredVolumeData] = useState<StackedBarDataPoint[]>([]);
@@ -123,6 +120,11 @@ export default function TradersStackedBarChart({
     }
   }, []);
   
+  // Get color for a category from the dynamic color map
+  const getCategoryColor = (category: string) => {
+    return categoryColorMap[category] || categoryColors[category] || '#6b7280';
+  };
+  
   // Fetch data from the API
   const fetchData = useCallback(async () => {
     console.log('[TradersStackedBarChart] Starting to fetch data');
@@ -152,6 +154,9 @@ export default function TradersStackedBarChart({
         // Set brush as active but don't set a specific domain
         setIsBrushActive(true);
         setBrushDomain(null);
+        
+        // Calculate total values per category and create color mapping
+        updateCategoryColorMapping(sortedVolumeData, sortedSignersData, dataType);
       }
     } catch (err) {
       console.error('[TradersStackedBarChart] Error fetching data:', err);
@@ -167,7 +172,50 @@ export default function TradersStackedBarChart({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dataType]);
+  
+  // Update color mapping when data type changes
+  useEffect(() => {
+    if (volumeData.length > 0 && signersData.length > 0) {
+      updateCategoryColorMapping(volumeData, signersData, dataType);
+    }
+  }, [dataType, volumeData, signersData]);
+  
+  // Function to calculate total values and assign colors
+  const updateCategoryColorMapping = (
+    volumeData: StackedBarDataPoint[], 
+    signersData: StackedBarDataPoint[],
+    currentDataType: DataType
+  ) => {
+    const relevantData = currentDataType === 'volume' ? volumeData : signersData;
+    
+    // Calculate total values per category
+    const categoryTotals: Record<string, number> = {};
+    
+    transactionCategories.forEach(category => {
+      categoryTotals[category] = 0;
+      
+      relevantData.forEach(dataPoint => {
+        categoryTotals[category] += dataPoint[category] || 0;
+      });
+    });
+    
+    // Sort categories by total values (highest first)
+    const sortedCategories = transactionCategories
+      .map(category => ({ name: category, total: categoryTotals[category] || 0 }))
+      .sort((a, b) => b.total - a.total)
+      .map(item => item.name);
+      
+    // Create color map - assign colors based on value ranking
+    const newColorMap: Record<string, string> = {};
+    sortedCategories.forEach((category, index) => {
+      // Use first set of colors from our palette (wrap around if needed)
+      newColorMap[category] = colors[index % colors.length];
+    });
+    
+    // Set the new color map
+    setCategoryColorMap(newColorMap);
+  };
   
   // Create a separate fetchData function for modal
   const fetchModalData = useCallback(async () => {
@@ -429,7 +477,7 @@ export default function TradersStackedBarChart({
       key: category,
       displayName: category,
       shape: 'square',
-      color: categoryColors[category] || '#6b7280'
+      color: getCategoryColor(category)
     }));
   };
   
@@ -475,7 +523,7 @@ export default function TradersStackedBarChart({
               tooltip.items && tooltip.items.length > 0 ? tooltip.items :
               // Otherwise use the single category/value from original tooltip
               [{
-                color: categoryColors[tooltip.category] || '#6b7280',
+                color: getCategoryColor(tooltip.category),
                 label: tooltip.category,
                 value: dataType === 'volume' ? formatVolume(tooltip.value) : formatLargeNumber(tooltip.value),
                 shape: 'square'
@@ -524,13 +572,13 @@ export default function TradersStackedBarChart({
               // Create items for all categories with non-zero values
               const tooltipItems = transactionCategories
                 .map(category => ({
-                  color: categoryColors[category] || '#6b7280',
+                  color: getCategoryColor(category),
                   label: category,
                   value: dataType === 'volume' 
                     ? formatVolume(dataPoint[category] || 0) 
                     : formatLargeNumber(dataPoint[category] || 0),
                   rawValue: dataPoint[category] || 0,
-                  shape: "square" as "square"
+                  shape: "square" as const
                 }))
                 .filter(item => item.rawValue > 0) // Only show non-zero values
                 .sort((a, b) => b.rawValue - a.rawValue); // Sort by value, highest first
@@ -582,7 +630,7 @@ export default function TradersStackedBarChart({
               
               const colorScale = scaleOrdinal<string, string>({
                 domain: transactionCategories,
-                range: transactionCategories.map(cat => categoryColors[cat] || '#6b7280')
+                range: transactionCategories.map(cat => getCategoryColor(cat))
               });
               
               return (
@@ -748,7 +796,7 @@ export default function TradersStackedBarChart({
           <div key={`legend-${index}`} className="flex items-center">
             <div 
               className="w-3 h-3 mr-1 rounded-sm" 
-              style={{ background: categoryColors[category] }}
+              style={{ background: getCategoryColor(category) }}
             ></div>
             <span className="text-xs text-gray-300">{category}</span>
           </div>

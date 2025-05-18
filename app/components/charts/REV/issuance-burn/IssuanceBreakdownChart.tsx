@@ -51,13 +51,60 @@ export const issuanceBreakdownColors = {
   grid: '#1f2937',
 };
 
-// Export colors for external use
-export const getIssuanceBreakdownColors = () => {
+// Sort issuance components by total value and assign colors
+const getValueBasedColors = (data: IssuanceDataPoint[]) => {
+  if (data.length === 0) return issuanceBreakdownColors;
+  
+  const metrics = [
+    'jito_labs_commission', 
+    'staking_reward', 
+    'voting_reward', 
+    'gross_sol_issuance'
+  ];
+  
+  // Calculate total value for each metric
+  const totals: { [key: string]: number } = {};
+  metrics.forEach(metric => {
+    totals[metric] = data.reduce((sum, d) => sum + (Number(d[metric as keyof typeof d]) || 0), 0);
+  });
+  
+  // Sort metrics by total value (highest first)
+  const sortedMetrics = [...metrics].sort((a, b) => totals[b] - totals[a]);
+  
+  // Define available colors
+  const availableColors = [
+    '#f97316', // orange
+    '#34d399', // green
+    '#facc15', // yellow
+    '#60a5fa', // blue
+  ];
+  
+  // Assign colors to metrics based on their value
+  const colorMap: { [key: string]: string } = {};
+  sortedMetrics.forEach((metric, index) => {
+    colorMap[metric] = availableColors[index % availableColors.length];
+  });
+  
+  // Create an updated version of the colors
   return {
-    jito: issuanceBreakdownColors.jitoLabsCommission,
-    staking: issuanceBreakdownColors.stakingReward,
-    voting: issuanceBreakdownColors.votingReward,
-    gross: issuanceBreakdownColors.grossIssuance
+    axisLines: issuanceBreakdownColors.axisLines,
+    tickLabels: issuanceBreakdownColors.tickLabels,
+    jitoLabsCommission: colorMap.jito_labs_commission || issuanceBreakdownColors.jitoLabsCommission,
+    stakingReward: colorMap.staking_reward || issuanceBreakdownColors.stakingReward,
+    votingReward: colorMap.voting_reward || issuanceBreakdownColors.votingReward,
+    grossIssuance: colorMap.gross_sol_issuance || issuanceBreakdownColors.grossIssuance,
+    grid: issuanceBreakdownColors.grid
+  };
+};
+
+// Dynamic version of getIssuanceBreakdownColors
+export const getDynamicBreakdownColors = (data: IssuanceDataPoint[]) => {
+  const colors = getValueBasedColors(data);
+  return {
+    jito: colors.jitoLabsCommission,
+    staking: colors.stakingReward,
+    voting: colors.votingReward,
+    gross: colors.grossIssuance
   };
 };
 
@@ -101,6 +148,16 @@ const getAvailableChartMetrics = (
   if (!data || data.length === 0) return [];
   
   return getIssuanceBreakdownChartMetrics(colors);
+};
+
+// Export colors for external use
+export const getIssuanceBreakdownColors = () => {
+  return {
+    jito: issuanceBreakdownColors.jitoLabsCommission,
+    staking: issuanceBreakdownColors.stakingReward,
+    voting: issuanceBreakdownColors.votingReward,
+    gross: issuanceBreakdownColors.grossIssuance
+  };
 };
 
 const IssuanceBreakdownChart: React.FC<IssuanceBreakdownChartProps> = ({ 

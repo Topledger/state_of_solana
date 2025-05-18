@@ -13,6 +13,7 @@ import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import Modal from '../../../shared/Modal';
 import TimeFilterSelector from '../../../shared/filters/TimeFilter';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -60,19 +61,46 @@ const formatDate = (dateStr: string, timeFilter?: TimeFilter) => {
   }
 };
 
+// Determine colors based on the metrics' values
+const determineMetricColors = (data: TvlVelocityDataPoint[]): { tvl: string, velocity: string } => {
+  if (!data || data.length === 0) {
+    return { tvl: colors[0], velocity: colors[1] }; // Default colors
+  }
+  
+  // Calculate total values for each metric
+  const totalTvl = data.reduce((sum, point) => sum + point.tvl, 0);
+  const totalVelocity = data.reduce((sum, point) => sum + point.velocity, 0);
+  
+  // Create array of metrics with their totals
+  const metrics = [
+    { name: 'tvl', value: totalTvl },
+    { name: 'velocity', value: totalVelocity }
+  ].sort((a, b) => b.value - a.value); // Sort by value, highest first
+  
+  // Assign colors based on sorted order
+  const metricColors: Record<string, string> = {};
+  metrics.forEach((metric, index) => {
+    metricColors[metric.name] = colors[index % colors.length];
+  });
+  
+  return {
+    tvl: metricColors['tvl'],
+    velocity: metricColors['velocity']
+  };
+};
+
 export const tvlVelocityColors = {
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
-  tvlBar: '#60a5fa',
-  velocityLine: '#a78bfa',
-  grid: '#1f2937',
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+  grid: grid,
 };
 
 // Export a function to get chart colors for external use
 export const getTvlVelocityChartColors = () => {
+  // Default fallback colors
   return {
-    tvl: tvlVelocityColors.tvlBar,
-    velocity: tvlVelocityColors.velocityLine
+    tvl: colors[0],
+    velocity: colors[1]
   };
 };
 
@@ -120,6 +148,12 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
   const [brushDomain, setBrushDomain] = useState<[Date, Date] | null>(null);
   const [isBrushActive, setIsBrushActive] = useState(false);
   
+  // Store metric colors based on data values
+  const [metricColors, setMetricColors] = useState<{ tvl: string, velocity: string }>({ 
+    tvl: colors[0], 
+    velocity: colors[1] 
+  });
+  
   // Modal specific data
   const [modalData, setModalData] = useState<TvlVelocityDataPoint[]>([]);
   const [modalLoading, setModalLoading] = useState<boolean>(true);
@@ -128,6 +162,10 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
   const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
   const [isModalBrushActive, setIsModalBrushActive] = useState(false);
   const [modalFilteredData, setModalFilteredData] = useState<TvlVelocityDataPoint[]>([]);
+  const [modalMetricColors, setModalMetricColors] = useState<{ tvl: string, velocity: string }>({
+    tvl: colors[0],
+    velocity: colors[1]
+  });
   
   // Shared tooltip state
   const [tooltip, setTooltip] = useState({ visible: false, dataPoint: null as TvlVelocityDataPoint | null, left: 0, top: 0 });
@@ -152,6 +190,10 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
         setError('No data available for this period.');
         setData([]);
       } else {
+        // Determine colors based on value magnitude
+        const colors = determineMetricColors(chartData);
+        setMetricColors(colors);
+        
         setData(chartData);
         setFilteredData(chartData);
         
@@ -185,6 +227,10 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
         setModalData([]);
         setModalFilteredData([]);
       } else {
+        // Determine colors based on value magnitude for modal
+        const colors = determineMetricColors(chartData);
+        setModalMetricColors(colors);
+        
         setModalData(chartData);
         setModalFilteredData(chartData);
         
@@ -516,6 +562,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
     const activeBrushDomain = isModal ? modalBrushDomain : brushDomain;
     const activeIsBrushActive = isModal ? isModalBrushActive : isBrushActive;
     const activeHandleBrushChange = isModal ? handleModalBrushChange : handleBrushChange;
+    const activeColors = isModal ? modalMetricColors : metricColors;
     const activeClearBrush = isModal 
       ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
       : () => { setBrushDomain(null); setIsBrushActive(false); };
@@ -546,8 +593,8 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
           <ChartTooltip
             title={formatDate(tooltip.dataPoint.date, activeTimeFilter)}
             items={[
-              { color: tvlVelocityColors.tvlBar, label: 'TVL', value: formatTvl(tooltip.dataPoint.tvl), shape: 'square' },
-              { color: tvlVelocityColors.velocityLine, label: 'Velocity', value: formatVelocity(tooltip.dataPoint.velocity), shape: 'circle' }
+              { color: activeColors.tvl, label: 'TVL', value: formatTvl(tooltip.dataPoint.tvl), shape: 'square' },
+              { color: activeColors.velocity, label: 'Velocity', value: formatVelocity(tooltip.dataPoint.velocity), shape: 'circle' }
             ]}
             top={tooltip.top}
             left={tooltip.left}
@@ -602,7 +649,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
                     
                     {/* Display active brush status */}
                     {activeIsBrushActive && (
-                      <text x={0} y={-8} fontSize={8} fill={tvlVelocityColors.velocityLine} textAnchor="start">
+                      <text x={0} y={-8} fontSize={8} fill={activeColors.velocity} textAnchor="start">
                         {`Filtered: ${displayData.length} item${displayData.length !== 1 ? 's' : ''}`}
                       </text>
                     )}
@@ -615,14 +662,14 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
                         if (barX === undefined || barHeight < 0) return null;
                         return (
                         <Bar key={`bar-${d.date}`} x={barX} y={innerHeight - barHeight} width={barWidth} height={barHeight}
-                          fill={tvlVelocityColors.tvlBar} opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7} />
+                          fill={activeColors.tvl} opacity={tooltip.dataPoint?.date === d.date ? 1 : 0.7} />
                         );
                       })}
                     
                     <LinePath data={displayData}
                       x={(d) => (dateScale(new Date(d.date)) ?? 0) + dateScale.bandwidth() / 2}
                       y={(d) => velocityScale(d.velocity)}
-                      stroke={tvlVelocityColors.velocityLine} strokeWidth={1.5} curve={curveMonotoneX} />
+                      stroke={activeColors.velocity} strokeWidth={1.5} curve={curveMonotoneX} />
                     
                     <AxisBottom top={innerHeight} scale={dateScale}
                       tickFormat={(date) => {
@@ -693,7 +740,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
             }
             getDate={(d) => d.date}
             getValue={(d) => d.tvl}
-            lineColor={tvlVelocityColors.tvlBar}
+            lineColor={activeColors.tvl}
             margin={{ top: 5, right: 25, bottom: 10, left: 45 }}
           />
         </div>
@@ -729,10 +776,7 @@ const TvlVelocityChart: React.FC<TvlVelocityChartProps> = ({
               <div className="flex flex-col gap-4 pt-4">
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
-                    {getAvailableChartMetrics(modalData, { 
-                      tvl: tvlVelocityColors.tvlBar, 
-                      velocity: tvlVelocityColors.velocityLine 
-                    }).map(metric => (
+                    {getAvailableChartMetrics(modalData, modalMetricColors).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 
                           className={`w-2.5 h-2.5 mr-2 ${metric.shape === 'circle' ? 'rounded-full' : 'rounded-sm'} mt-0.5`}

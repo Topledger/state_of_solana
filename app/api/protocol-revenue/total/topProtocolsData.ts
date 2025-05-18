@@ -44,4 +44,39 @@ export const formatCurrency = (value: number): string => {
   } else {
     return `$${value.toFixed(2)}`;
   }
+};
+
+// Prepare CSV data for top protocols
+export const prepareTopProtocolsCSV = async (): Promise<string> => {
+  try {
+    // Fetch the data from the API
+    const data = await fetchTopProtocolsRevenueData();
+    
+    if (!data || data.length === 0) {
+      throw new Error('No top protocols revenue data available');
+    }
+    
+    // Sort platforms by revenue (descending)
+    const sortedData = [...data].sort((a, b) => b.protocol_revenue - a.protocol_revenue);
+    
+    // Create CSV headers
+    const headers = ['Platform', 'protocol_revenue_usd'];
+    
+    // Create rows from the raw data
+    const rows = sortedData.map(item => [
+      item.platform,
+      item.protocol_revenue.toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    return csvContent;
+  } catch (error) {
+    console.error('Error preparing top protocols CSV:', error);
+    throw error;
+  }
 }; 

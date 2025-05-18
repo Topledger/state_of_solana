@@ -17,6 +17,7 @@ import { extent, max } from "@visx/vendor/d3-array";
 import { localPoint } from "@visx/event";
 import { useTooltip, defaultStyles } from '@visx/tooltip';
 import { TooltipWithBounds } from '@visx/tooltip';
+import { blue, green, red, purple, grid, tickLabels } from '@/app/utils/chartColors';
 
 const RefreshIcon = ({ className = "w-4 h-4" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -26,10 +27,10 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => (
 
 // Colors for the chart elements
 const colorMap = {
-  Total_Vote_Transactions: "#4682b4", // blue
-  Total_Non_Vote_Transactions: "#2ecc71", // green
-  Succeesful_Transactions_perc: "#e74c3c", // red
-  Successful_Non_Vote_Transactiosn_perc: "#9b59b6", // purple
+  Total_Vote_Transactions: blue,
+  Total_Non_Vote_Transactions: green,
+  Succeesful_Transactions_perc: red,
+  Successful_Non_Vote_Transactiosn_perc: purple,
 };
 
 const labelMap = {
@@ -40,8 +41,8 @@ const labelMap = {
 };
 
 // Constants for styling
-const axisColor = "#9CA3AF"; // gray-400
-const gridColor = "rgba(156, 163, 175, 0.1)"; // translucent gray-400
+const axisColor = tickLabels;
+const gridColor = grid;
 
 interface TxnStatsChartProps {
   isModalOpen?: boolean;

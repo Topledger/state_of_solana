@@ -11,6 +11,9 @@ import Modal from '../../../shared/Modal';
 import ChartTooltip from '../../../shared/ChartTooltip';
 import { DownloadIcon } from '../../../shared/Icons';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
+import { 
+  colors, getFirstNColors, axisLines, tickLabels 
+} from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -31,20 +34,6 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
     </svg>
   );
 };
-
-// Define color palette
-const colors = [
-  '#a78bfa', // purple
-  '#60a5fa', // blue
-  '#34d399', // green
-  '#f97316', // orange
-  '#f43f5e', // red
-  '#facc15', // yellow
-  '#14b8a6', // teal
-  '#8b5cf6', // indigo
-  '#ec4899', // pink
-  '#6b7280', // gray
-];
 
 // Function to get legends for display
 const getLegendItems = (data: TvlByPoolDataPoint[], colorScale: (pool: string) => string) => {
@@ -69,6 +58,9 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Color mapping state - maps pool names to colors based on TVL values
+  const [poolColorMap, setPoolColorMap] = useState<Record<string, string>>({});
+  
   // State for modal
   const [modalData, setModalData] = useState<TvlByPoolDataPoint[]>([]);
   const [modalLoading, setModalLoading] = useState<boolean>(true);
@@ -90,6 +82,11 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
     y: 0
   });
 
+  // Get color for a pool from the dynamic color map
+  const getPoolColor = (pool: string) => {
+    return poolColorMap[pool] || colors[0]; // Fallback to first color if not found
+  };
+
   // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,6 +94,9 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
     try {
       const chartData = await fetchTvlByPoolDataWithFallback();
       setData(chartData);
+      
+      // Create color mapping based on TVL values
+      createPoolColorMapping(chartData);
     } catch (err) {
       console.error('Error loading TVL by Pool chart data:', err);
       setError('No data available for this period.');
@@ -105,6 +105,26 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
       setLoading(false);
     }
   }, []);
+  
+  // Function to create color mapping based on TVL values
+  const createPoolColorMapping = (chartData: TvlByPoolDataPoint[]) => {
+    if (!chartData || chartData.length === 0) return;
+    
+    // Sort pools by TVL (highest first)
+    const sortedPools = [...chartData]
+      .sort((a, b) => b.tvl - a.tvl)
+      .map(item => item.pool);
+    
+    // Create color map - assign colors based on TVL ranking
+    const newColorMap: Record<string, string> = {};
+    sortedPools.forEach((pool, index) => {
+      // Use colors from our palette (wrap around if needed)
+      newColorMap[pool] = colors[index % colors.length];
+    });
+    
+    // Set the new color map
+    setPoolColorMap(newColorMap);
+  };
 
   // Fetch data for main chart
   useEffect(() => {
@@ -122,6 +142,7 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
         fetchTvlByPoolDataWithFallback()
           .then(chartData => {
             setModalData(chartData);
+            createPoolColorMapping(chartData);
           })
           .catch(err => {
             console.error('Error loading modal chart data:', err);
@@ -137,7 +158,7 @@ const TvlByPoolChart: React.FC<TvlByPoolChartProps> = ({
   const getColorScale = (chartData: TvlByPoolDataPoint[]) => {
     return scaleOrdinal({
       domain: chartData.map(d => d.pool),
-      range: colors.slice(0, chartData.length)
+      range: chartData.map(d => getPoolColor(d.pool))
     });
   };
 

@@ -59,4 +59,54 @@ export const getUniqueSegments = (data: DappRevenueDataPoint[]): string[] => {
 // Get unique dapps from data
 export const getUniqueDapps = (data: DappRevenueDataPoint[]): string[] => {
   return [...new Set(data.map(item => item.dapp))];
+};
+
+// Prepare CSV data for dapp revenue
+export const prepareDappRevenueCSV = async (): Promise<string> => {
+  try {
+    // Fetch the data from the API
+    const data = await fetchDappRevenueData();
+    
+    if (!data || data.length === 0) {
+      throw new Error('No dapp revenue data available');
+    }
+    
+    // Group by dapp and calculate total revenue
+    const dappRevenueMap: Record<string, number> = {};
+    const dappSegmentMap: Record<string, string> = {};
+    
+    data.forEach(item => {
+      if (!dappRevenueMap[item.dapp]) {
+        dappRevenueMap[item.dapp] = 0;
+        dappSegmentMap[item.dapp] = item.segment;
+      }
+      dappRevenueMap[item.dapp] += item.protocol_revenue;
+    });
+    
+    // Sort dapps by total revenue (descending)
+    const sortedDapps = Object.entries(dappRevenueMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([dapp]) => dapp);
+    
+    // Create CSV headers
+    const headers = ['Dapp', 'Segment', 'protocol_revenue_usd'];
+    
+    // Create rows from the sorted data
+    const rows = sortedDapps.map(dapp => [
+      dapp,
+      dappSegmentMap[dapp],
+      dappRevenueMap[dapp].toFixed(2)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    return csvContent;
+  } catch (error) {
+    console.error('Error preparing dapp revenue CSV:', error);
+    throw error;
+  }
 }; 

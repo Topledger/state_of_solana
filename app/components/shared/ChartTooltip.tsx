@@ -9,6 +9,7 @@ interface TooltipItem {
   label: string;
   value: string | number;
   shape?: ShapeType;
+  axis?: 'left' | 'right';
 }
 
 // Tooltip component props
@@ -18,6 +19,7 @@ interface ChartTooltipProps {
   top: number;
   left: number;
   isModal?: boolean;
+  timeFilter?: string;
 }
 
 // Function to render the shape for a legend item
@@ -28,16 +30,81 @@ const LegendShape: React.FC<{ type: ShapeType; color: string }> = ({ type, color
   return <div className="h-2 w-2 rounded-sm mr-1.5" style={{ backgroundColor: color }}></div>;
 };
 
+// Function to format date title based on timeFilter
+const formatTooltipTitle = (title: string, timeFilter?: string): string => {
+  // Check if it's a date format
+  if (/^\d{4}-\d{2}-\d{2}/.test(title) || /^\d{2}\/\d{2}\/\d{4}/.test(title)) {
+    const d = new Date(title);
+    if (!isNaN(d.getTime())) {
+      // Weekly data
+      if (timeFilter === 'W') {
+        return `Week of ${d.toLocaleDateString('en-US', { 
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric'
+        })}`;
+      } 
+      // Monthly data
+      else if (timeFilter === 'M') {
+        return d.toLocaleDateString('en-US', { 
+          month: 'short',
+          year: 'numeric'
+        });
+      } 
+      // Quarterly data
+      else if (timeFilter === 'Q') {
+        const quarter = Math.floor(d.getMonth() / 3) + 1;
+        return `Q${quarter}, ${d.getFullYear()}`;
+      } 
+      // Yearly data
+      else if (timeFilter === 'Y') {
+        return d.getFullYear().toString();
+      }
+      
+      // Default format (daily)
+      return d.toLocaleDateString('en-US', { 
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric'
+      });
+    }
+  }
+  
+  // For month-year format like "Jan 2023"
+  if (/^[A-Za-z]{3}\s\d{4}$/.test(title)) {
+    return title;
+  }
+  
+  // For quarterly format like "Q1 2023"
+  if (/^Q[1-4]\s\d{4}$/.test(title)) {
+    return title;
+  }
+  
+  // For year only
+  if (/^\d{4}$/.test(title)) {
+    return title;
+  }
+  
+  return title;
+};
+
 // Main tooltip component
 const ChartTooltip: React.FC<ChartTooltipProps> = ({ 
   title, 
   items, 
   top, 
   left, 
-  isModal = false 
+  isModal = false,
+  timeFilter
 }) => {
   // Calculate if tooltip should be positioned right to left (to avoid edge cutoff)
   const shouldFlipX = left > (isModal ? 500 : 250);
+  
+  // Check if we have any axis information (dual-axis chart)
+  const hasDualAxisItems = items.some(item => item.axis);
+  
+  // Format the title based on timeFilter if provided
+  const formattedTitle = formatTooltipTitle(title, timeFilter);
 
   return (
     <div 
@@ -49,8 +116,8 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
       }}
     >
       {/* Title */}
-      <div className="text-gray-200 font-normal pb-1 mb-1 border-b border-gray-800">
-        {title}
+      <div className="text-gray-400 text-[10px] font-normal pb-1 mb-1 border-b border-gray-800">
+        {formattedTitle}
       </div>
       
       {/* Items */}
@@ -60,6 +127,13 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
             <div className="flex items-center text-gray-400">
               <LegendShape type={item.shape || 'circle'} color={item.color} />
               <span className="text-gray-400 font-normal ml-2">{item.label}</span>
+              
+              {/* Show axis indicator for dual-axis charts */}
+              {hasDualAxisItems && item.axis && (
+                <span className="ml-1 text-[9px] text-gray-500">
+                  ({item.axis} axis)
+                </span>
+              )}
             </div>
             <span className="text-gray-300 font-normal ml-4">{item.value}</span>
           </div>

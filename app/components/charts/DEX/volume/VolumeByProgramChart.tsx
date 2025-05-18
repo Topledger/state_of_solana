@@ -11,6 +11,7 @@ import Modal from '../../../shared/Modal';
 import ChartTooltip from '../../../shared/ChartTooltip';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
 import { DownloadIcon } from '../../../shared/Icons';
+import { colors } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -33,18 +34,7 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 };
 
 // Define color palette (same colors as used in the legend)
-const colors = [
-  '#a78bfa', // purple - Jupiter
-  '#60a5fa', // blue - Raydium
-  '#9ca3af', // gray - Others
-  '#f97316', // orange - OKX
-  '#34d399', // green - Orca
-  '#f43f5e', // red - Meteora
-  '#facc15', // yellow - Pump Fun
-  '#14b8a6', // teal - SolFi
-  '#8b5cf6', // indigo - Lifinity
-  '#6b7280', // darker gray - Others (Low Volume)
-];
+const getChartColors = () => colors.slice(0, 10);
 
 // Function to get legends for display
 const getLegendItems = (data: VolumeByProgramDataPoint[], colorScale: (dex: string) => string) => {
@@ -135,9 +125,16 @@ const VolumeByProgramChart: React.FC<VolumeByProgramChartProps> = ({
 
   // Color scale
   const getColorScale = (chartData: VolumeByProgramDataPoint[]) => {
+    // Sort the data by volume (highest first) to ensure consistent color assignment
+    const sortedData = [...chartData].sort((a, b) => b.volume - a.volume);
+    const sortedDexes = sortedData.map(d => d.dex);
+    
+    // Get the colors for the chart
+    const colorPalette = getChartColors();
+    
     return scaleOrdinal({
-      domain: chartData.map(d => d.dex),
-      range: colors.slice(0, chartData.length)
+      domain: sortedDexes,
+      range: colorPalette.slice(0, sortedDexes.length)
     });
   };
 

@@ -4,7 +4,7 @@ import { Group } from '@visx/group';
 import { scaleLinear, scaleTime } from '@visx/scale';
 import { Brush } from '@visx/brush';
 import { LinePath } from '@visx/shape';
-import { curveMonotoneX } from '@visx/curve';
+import { curveMonotoneX, curveLinear, curveStep, curveBasis, curveCardinal, curveCatmullRom } from '@visx/curve';
 
 export interface BrushTimeScaleProps {
   data: any[];
@@ -22,6 +22,12 @@ export interface BrushTimeScaleProps {
   lineColor: string;
   // Optional margin
   margin?: { top: number; right: number; bottom: number; left: number };
+  // Custom curve type
+  curveType?: string | null;
+  // Stroke width
+  strokeWidth?: number;
+  // Filter values - when these change, brush should reset to fully selected mode
+  filterValues?: Record<string, string>;
 }
 
 const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
@@ -34,13 +40,19 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
   getValue,
   getUniqueDates,
   lineColor,
-  margin = { top: 5, right: 25, bottom: 10, left: 45 }
+  margin = { top: 5, right: 25, bottom: 10, left: 45 },
+  curveType = "monotoneX",
+  strokeWidth,
+  filterValues
 }) => {
   // Prevent the initial render from triggering onChange
   const initialRenderRef = useRef(true);
   
   // Track the brush instance to prevent unnecessary updates
   const brushRef = useRef<any>(null);
+  
+  // Add a ref to the SVG container so we can find DOM elements more reliably
+  const svgRef = useRef<SVGSVGElement | null>(null);
   
   // Generate a stable ID for this component instance
   const instanceIdRef = useRef(`brush-${Math.random().toString(36).substring(2, 9)}`);
@@ -49,6 +61,100 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
   const brushKey = React.useMemo(() => {
     return `${instanceIdRef.current}-${data.length}`;
   }, [data.length]);
+  
+  // Track previous filter values to detect changes
+  const prevFilterValuesRef = useRef<Record<string, string> | undefined>(filterValues);
+
+  // Effect to reset brush when filter values change
+  useEffect(() => {
+    // Skip the initial render
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false;
+      return;
+    }
+
+    // Check if filterValues exist and have changed
+    if (filterValues && prevFilterValuesRef.current) {
+      // Check if any filter values have changed
+      const hasFilterChanged = Object.keys(filterValues).some(key => 
+        filterValues[key] !== prevFilterValuesRef.current?.[key]
+      );
+
+      if (hasFilterChanged) {
+        console.log('Filter changed, resetting brush to show full dataset');
+        
+        // Reset the brush to show the full dataset
+        onClearBrush();
+        
+        // Force visual reset of the brush selection by manipulating the DOM
+        setTimeout(() => {
+          // Use the SVG reference to scope our search to just this component
+          if (svgRef.current) {
+            const selectionRect = svgRef.current.querySelector('.visx-brush-selection');
+            const brushElement = svgRef.current.querySelector('.visx-brush');
+            
+            if (selectionRect && brushElement) {
+              const containerWidth = brushElement.getBoundingClientRect().width;
+              // Reset to full width with slight padding
+              selectionRect.setAttribute('width', String(containerWidth - 4));
+              selectionRect.setAttribute('x', '2');
+              console.log(`Reset brush to width: ${containerWidth - 4}, x: 2`);
+            } else {
+              console.log('Could not find brush elements within SVG');
+            }
+          } else {
+            // Fallback to document-wide search if SVG ref isn't available
+            console.log('Falling back to document-wide search');
+            const allSelections = document.querySelectorAll('.visx-brush-selection');
+            const allBrushes = document.querySelectorAll('.visx-brush');
+            
+            if (allSelections.length > 0 && allBrushes.length > 0) {
+              const selectionRect = allSelections[0];
+              const brushElement = allBrushes[0];
+              
+              const containerWidth = brushElement.getBoundingClientRect().width;
+              selectionRect.setAttribute('width', String(containerWidth - 4));
+              selectionRect.setAttribute('x', '2');
+              console.log(`Reset brush using fallback method: width: ${containerWidth - 4}, x: 2`);
+            } else {
+              console.log('Could not find any brush elements in document');
+            }
+          }
+        }, 50);
+      }
+    }
+
+    // Update ref for next comparison
+    prevFilterValuesRef.current = filterValues;
+  }, [filterValues, onClearBrush]);
+  
+  // Map curve type string to actual curve function
+  const getCurveFunction = useCallback((type: string | null) => {
+    // Always return a valid curve function
+    if (type === null) return curveLinear;
+    
+    switch (type) {
+      case 'monotoneX':
+        return curveMonotoneX;
+      case 'linear':
+        return curveLinear;
+      case 'step':
+        return curveStep;
+      case 'basis':
+        return curveBasis;
+      case 'cardinal':
+        return curveCardinal;
+      case 'catmullRom':
+        return curveCatmullRom;
+      default:
+        return curveMonotoneX; // Default
+    }
+  }, []);
+  
+  // Get the actual curve function
+  const curveFunction = React.useMemo(() => {
+    return getCurveFunction(curveType);
+  }, [curveType, getCurveFunction]);
   
   if (data.length === 0) return null;
   
@@ -84,11 +190,18 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
             nice: true
           });
           
-          // Find max value for Y axis scale
-          const maxValue = Math.max(
-            ...data.map(d => getValue(d)),
-            1 // Ensure minimum scale even if all values are 0
-          );
+          // Find max value for Y axis scale (ensuring we don't have bad values)
+          let allValues = data.map(d => {
+            const val = getValue(d);
+            return (val === undefined || val === null || isNaN(val)) ? 0 : val;
+          });
+          
+          // Ensure we have at least one positive value for scale
+          if (allValues.length === 0 || Math.max(...allValues) <= 0) {
+            allValues = [1];
+          }
+          
+          const maxValue = Math.max(...allValues);
           
           const valueScale = scaleLinear<number>({
             domain: [0, maxValue * 1.1], // Add 10% headroom
@@ -131,33 +244,32 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
                 };
               })
             // Otherwise use data directly with indices
-            : data.map((d, idx) => ({
-                date: typeof getDate(d) === 'string' ? getDate(d) as string : (getDate(d) as Date).toISOString(),
-                idx,
-                value: getValue(d)
-              }));
+            : data.map((d, idx) => {
+                // Ensure valid values for the line path
+                const val = getValue(d);
+                const safeValue = (val === undefined || val === null || isNaN(val)) ? 0 : val;
+                
+                return {
+                  date: typeof getDate(d) === 'string' ? getDate(d) as string : (getDate(d) as Date).toISOString(),
+                  idx,
+                  value: safeValue
+                };
+              });
               
           // Create a wrapped change handler that prevents the initial render from triggering updates
           const handleBrushChange = (domain: any) => {
-            if (initialRenderRef.current) {
-              // Skip the first onChange event
-              initialRenderRef.current = false;
-              return;
-            }
-            
-            if (!domain) {
+            if (domain) {
+              // Use requestAnimationFrame to avoid React update loops
+              window.requestAnimationFrame(() => {
+                onBrushChange(domain);
+              });
+            } else {
               onClearBrush();
-              return;
             }
-            
-            // Use requestAnimationFrame to avoid React update loops
-            window.requestAnimationFrame(() => {
-              onBrushChange(domain);
-            });
           };
           
           return (
-            <svg width={width} height={height}>
+            <svg width={width} height={height} ref={svgRef}>
               <Group left={margin.left} top={margin.top}>
                 {/* Background rectangle to ensure brush is visible when empty */}
                 <rect
@@ -172,11 +284,18 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
                 <LinePath 
                   data={lineData}
                   x={(d) => indexScale(d.idx)}
-                  y={(d) => valueScale(d.value)}
+                  y={(d) => {
+                    // Ensure we have valid values
+                    const val = d.value;
+                    if (val === undefined || val === null || isNaN(val)) {
+                      return valueScale(0);
+                    }
+                    return valueScale(val);
+                  }}
                   stroke={lineColor || "#53a7fe"}
                   strokeOpacity={0.3}
-                  strokeWidth={1.5}
-                  curve={curveMonotoneX}
+                  strokeWidth={strokeWidth || 1.5}
+                  curve={curveFunction}
                 />
                 
                 <Brush

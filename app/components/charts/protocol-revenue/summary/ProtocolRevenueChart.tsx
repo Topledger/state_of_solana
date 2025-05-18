@@ -11,9 +11,10 @@ import { ProtocolRevenueDataPoint, TimeFilter, fetchProtocolRevenueData, formatV
 import Loader from '../../../shared/Loader';
 import ChartTooltip from '../../../shared/ChartTooltip';
 import ButtonSecondary from '../../../shared/buttons/ButtonSecondary';
-import Modal from '../../../shared/Modal';
+import Modal, { ScrollableLegend } from '../../../shared/Modal';
 import TimeFilterSelector from '../../../shared/filters/TimeFilter';
 import BrushTimeScale from '../../../shared/BrushTimeScale';
+import { colors, grid, axisLines, tickLabels } from '../../../../utils/chartColors';
 
 // Define RefreshIcon component directly in this file
 const RefreshIcon = ({ className = "w-4 h-4" }) => {
@@ -38,25 +39,64 @@ const RefreshIcon = ({ className = "w-4 h-4" }) => {
 // Props interface
 interface ProtocolRevenueChartProps {
   timeFilter?: TimeFilter;
+  displayMode?: string;
   isModalOpen?: boolean;
   onModalClose?: () => void;
   onTimeFilterChange?: (filter: TimeFilter) => void;
+  onDisplayModeChange?: (mode: any) => void;
 }
 
 // Chart colors
 export const protocolRevenueChartColors = {
-  protocolRevenue: '#60a5fa', // blue
-  solanaRevenue: '#a78bfa', // purple
-  grid: '#1f2937',
-  axisLines: '#374151',
-  tickLabels: '#6b7280',
+  protocolRevenue: colors[0], // blue (1st color)
+  solanaRevenue: colors[2], // green (3rd color)
+  grid: grid,
+  axisLines: axisLines,
+  tickLabels: tickLabels,
+};
+
+// Process data for brush component - ensure one data point per month
+const processDataForBrush = (data: ProtocolRevenueDataPoint[]) => {
+  if (!data || data.length === 0) return [];
+  
+  // Group data by month to ensure one data point per month
+  const revenueByMonth = data.reduce<Record<string, number>>((acc, curr) => {
+    if (!acc[curr.month]) {
+      acc[curr.month] = 0;
+    }
+    acc[curr.month] += curr.protocol_revenue;
+    return acc;
+  }, {});
+  
+  // Convert to array of { month, value } objects for the brush
+  return Object.entries(revenueByMonth).map(([month, value]) => ({
+    month,
+    date: new Date(month),
+    value
+  }));
+};
+
+// Format currency values more concisely (no decimal places for millions)
+const formatCurrency = (value: number): string => {
+  if (value >= 1e9) {
+    return `$${Math.round(value / 1e9)}B`;
+  }
+  if (value >= 1e6) {
+    return `$${Math.round(value / 1e6)}M`;
+  }
+  if (value >= 1e3) {
+    return `$${Math.round(value / 1e3)}K`;
+  }
+  return `$${Math.round(value)}`;
 };
 
 const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({ 
   timeFilter = 'M', // Default to monthly if not provided
+  displayMode,
   isModalOpen = false, 
   onModalClose = () => {},
-  onTimeFilterChange
+  onTimeFilterChange,
+  onDisplayModeChange
 }) => {
   // Main chart data
   const [data, setData] = useState<ProtocolRevenueDataPoint[]>([]);
@@ -508,6 +548,13 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
       );
     }
     
+    // Define consistent margins for chart and brush to ensure alignment
+    const chartMargin = { top: 10, right: 15, bottom: 30, left: 45 };
+    const brushMargin = { top: 5, right: chartMargin.right, bottom: 10, left: chartMargin.left };
+    
+    // Process data for brush
+    const brushData = processDataForBrush(activeData);
+    
     return (
       <div className="flex flex-col h-full">
         {tooltip.visible && tooltip.dataPoint && (
@@ -517,13 +564,13 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
               {
                 color: protocolRevenueChartColors.protocolRevenue,
                 label: 'Protocol Revenue',
-                value: formatValue(tooltip.dataPoint.protocol_revenue),
+                value: formatCurrency(tooltip.dataPoint.protocol_revenue),
                 shape: 'square'
               },
               {
                 color: protocolRevenueChartColors.solanaRevenue,
                 label: 'Solana Revenue',
-                value: formatValue(tooltip.dataPoint.Solana_Rev),
+                value: formatCurrency(tooltip.dataPoint.Solana_Rev),
                 shape: 'square'
               }
             ]}
@@ -543,7 +590,7 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
             {({ width, height }) => {
               if (width <= 0 || height <= 0) return null; 
               
-              const margin = { top: 10, right: 45, bottom: 30, left: 60 };
+              const margin = chartMargin;
               const innerWidth = width - margin.left - margin.right;
               const innerHeight = height - margin.top - margin.bottom;
               if (innerWidth <= 0 || innerHeight <= 0) return null;
@@ -654,7 +701,7 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
                       tickStroke="transparent" 
                       tickLength={0} 
                       numTicks={5}
-                      tickFormat={(value) => formatValue(value as number)}
+                      tickFormat={(value) => formatCurrency(value as number)}
                       tickLabelProps={() => ({ 
                         fill: protocolRevenueChartColors.tickLabels, 
                         fontSize: 11, 
@@ -700,7 +747,7 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
         {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
           <BrushTimeScale
-            data={activeData}
+            data={brushData}
             isModal={isModal}
             activeBrushDomain={activeBrushDomain}
             onBrushChange={activeHandleBrushChange}
@@ -713,10 +760,10 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
                 setIsBrushActive(false);
               }
             }}
-            getDate={(d) => d.month}
-            getValue={(d) => d.protocol_revenue}
+            getDate={(d) => d.date.toISOString()}
+            getValue={(d) => d.value}
             lineColor={protocolRevenueChartColors.protocolRevenue}
-            margin={{ top: 5, right: 25, bottom: 10, left: 60 }}
+            margin={brushMargin}
           />
         </div>
       </div>
@@ -739,21 +786,23 @@ const ProtocolRevenueChart: React.FC<ProtocolRevenueChartProps> = ({
             
             {/* Legend area - 10% width */}
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-              <div className="text-[10px] text-gray-400 mb-2">REVENUE</div>
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-sm mr-1.5" 
-                  style={{ backgroundColor: protocolRevenueChartColors.protocolRevenue }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Protocol Revenue</span>
-              </div>
-              <div className="flex items-center mb-1.5">
-                <div 
-                  className="w-2.5 h-2.5 rounded-sm mr-1.5" 
-                  style={{ backgroundColor: protocolRevenueChartColors.solanaRevenue }}
-                ></div>
-                <span className="text-[11px] text-gray-300">Solana Revenue</span>
-              </div>
+              <ScrollableLegend
+          
+                items={[
+                  {
+                    id: 'protocol-revenue',
+                    label: 'Protocol Revenue',
+                    color: protocolRevenueChartColors.protocolRevenue,
+                    
+                  },
+                  {
+                    id: 'solana-revenue',
+                    label: 'Solana Revenue',
+                    color: protocolRevenueChartColors.solanaRevenue,
+                    
+                  }
+                ]}
+              />
             </div>
           </div>
         </div>

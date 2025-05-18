@@ -12,7 +12,7 @@ import { GridRows } from '@visx/grid';
 import Loader from "@/app/components/shared/Loader";
 import ButtonSecondary from "@/app/components/shared/buttons/ButtonSecondary";
 import ChartTooltip from "@/app/components/shared/ChartTooltip";
-import Modal from "@/app/components/shared/Modal";
+import Modal, { ScrollableLegend } from "@/app/components/shared/Modal";
 import TimeFilterSelector from "@/app/components/shared/filters/TimeFilter";
 import BrushTimeScale from "@/app/components/shared/BrushTimeScale";
 import LegendItem from "@/app/components/shared/LegendItem";
@@ -31,6 +31,20 @@ const chartColors = {
   solanaRevenue: '#a78bfa',   // purple
   grid: '#1f2937',
   axis: '#374151'
+};
+
+// Format currency values more concisely (no decimal places for millions)
+const formatCurrency = (value: number): string => {
+  if (value >= 1e9) {
+    return `$${Math.round(value / 1e9)}B`;
+  }
+  if (value >= 1e6) {
+    return `$${Math.round(value / 1e6)}M`;
+  }
+  if (value >= 1e3) {
+    return `$${Math.round(value / 1e3)}K`;
+  }
+  return `$${Math.round(value)}`;
 };
 
 // Define RefreshIcon component
@@ -61,6 +75,27 @@ interface CumulativeRevenueChartProps {
   onTimeFilterChange?: (filter: TimeFilter) => void;
   legendsChanged?: (legends: {label: string, color: string, value?: number}[]) => void;
 }
+
+// Process data for brush component - ensure one data point per month
+const processDataForBrush = (data: ProtocolRevenueDataPoint[]) => {
+  if (!data || data.length === 0) return [];
+  
+  // Group data by month to ensure one data point per month
+  const revenueByMonth = data.reduce<Record<string, number>>((acc, curr) => {
+    if (!acc[curr.month]) {
+      acc[curr.month] = 0;
+    }
+    acc[curr.month] += curr.cumulative_protocol_revenue;
+    return acc;
+  }, {});
+  
+  // Convert to array of { month, date, value } objects for the brush
+  return Object.entries(revenueByMonth).map(([month, value]) => ({
+    month,
+    date: new Date(month),
+    value
+  }));
+};
 
 // Main chart component
 const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({ 
@@ -443,6 +478,13 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
       );
     }
     
+    // Define consistent margins for chart and brush to ensure alignment
+    const chartMargin = { top: 10, right: 15, bottom: 30, left: 45 };
+    const brushMargin = { top: 5, right: chartMargin.right, bottom: 10, left: chartMargin.left };
+    
+    // Process data for brush
+    const brushData = processDataForBrush(activeData);
+    
     return (
       <div className="flex flex-col h-full">
         {tooltip.visible && tooltip.dataPoint && (() => {
@@ -451,13 +493,13 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
             {
               color: chartColors.protocolRevenue,
               label: 'Protocol Revenue',
-              value: formatValue(tooltip.dataPoint.cumulative_protocol_revenue),
+              value: formatCurrency(tooltip.dataPoint.cumulative_protocol_revenue),
               shape: 'square' as const
             },
             {
               color: chartColors.solanaRevenue,
               label: 'Solana Revenue',
-              value: formatValue(tooltip.dataPoint.Cumulative_Solana_Rev),
+              value: formatCurrency(tooltip.dataPoint.Cumulative_Solana_Rev),
               shape: 'square' as const
             }
           ];
@@ -483,7 +525,7 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
             {({ width, height }) => {
               if (width <= 0 || height <= 0) return null;
               
-              const margin = { top: 10, right: 45, bottom: 30, left: 60 };
+              const margin = chartMargin;
               const innerWidth = width - margin.left - margin.right;
               const innerHeight = height - margin.top - margin.bottom;
               if (innerWidth <= 0 || innerHeight <= 0) return null;
@@ -586,7 +628,7 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
                       tickStroke="transparent"
                       tickLength={0}
                       numTicks={5}
-                      tickFormat={(value) => formatValue(value as number)}
+                      tickFormat={(value) => formatCurrency(value as number)}
                       tickLabelProps={() => ({ 
                         fill: '#6b7280', 
                         fontSize: 11, 
@@ -633,18 +675,18 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
         {/* Brush component */}
         <div className="h-[15%] w-full mt-1">
           <BrushTimeScale
-            data={isModal ? modalData : data}
+            data={brushData}
             isModal={isModal}
-            activeBrushDomain={isModal ? modalBrushDomain : brushDomain}
-            onBrushChange={isModal ? handleModalBrushChange : handleBrushChange}
+            activeBrushDomain={activeBrushDomain}
+            onBrushChange={activeHandleBrushChange}
             onClearBrush={isModal 
               ? () => { setModalBrushDomain(null); setIsModalBrushActive(false); }
               : () => { setBrushDomain(null); setIsBrushActive(false); }
             }
-            getDate={(d) => d.month}
-            getValue={(d) => d.cumulative_protocol_revenue}
+            getDate={(d) => d.date.toISOString()}
+            getValue={(d) => d.value}
             lineColor={chartColors.protocolRevenue}
-            margin={{ top: 5, right: 25, bottom: 10, left: 60 }}
+            margin={brushMargin}
           />
         </div>
       </div>
@@ -672,7 +714,7 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
             
             {/* Legend area - 10% width */}
             <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-              <div className="text-[10px] text-gray-400 mb-2">REVENUE</div>
+              
               {modalLoading ? (
                 // Show loading state
                 <>
@@ -680,25 +722,24 @@ const CumulativeRevenueChart: React.FC<CumulativeRevenueChartProps> = ({
                   <LegendItem label="Loading..." color="#a78bfa" isLoading={true} />
                 </>
               ) : (
-                // Create legend items array
-                Object.entries({
-                  'Protocol Revenue': {
-                    color: chartColors.protocolRevenue,
-                    value: modalData.length > 0 ? modalData[modalData.length - 1].cumulative_protocol_revenue : 0
-                  },
-                  'Solana Revenue': {
-                    color: chartColors.solanaRevenue,
-                    value: modalData.length > 0 ? modalData[modalData.length - 1].Cumulative_Solana_Rev : 0
-                  }
-                }).map(([label, { color, value }]) => (
-                  <div key={label} className="flex items-center mb-1.5">
-                    <div 
-                      className="w-2.5 h-2.5 rounded-sm mr-1.5" 
-                      style={{ backgroundColor: color }}
-                    ></div>
-                    <span className="text-[11px] text-gray-300">{label}</span>
-                  </div>
-                ))
+                // Use ScrollableLegend component
+                <ScrollableLegend
+                  
+                  items={[
+                    {
+                      id: 'protocol-revenue',
+                      label: 'Protocol Revenue',
+                      color: chartColors.protocolRevenue,
+                     
+                    },
+                    {
+                      id: 'solana-revenue',
+                      label: 'Solana Revenue',
+                      color: chartColors.solanaRevenue,
+                      
+                    }
+                  ]}
+                />
               )}
             </div>
           </div>
