@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// For Next.js static export compatibility
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /**
  * Generate sample data for multi-series charts
  * This endpoint provides data with multiple metrics for the same entities

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// For Next.js static export compatibility
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   // Generate dates for the last 30 days
   const dates = Array.from({ length: 30 }, (_, i) => {

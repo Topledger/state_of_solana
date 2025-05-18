@@ -10,7 +10,7 @@ An interactive dashboard displaying key metrics and visualizations for the Solan
 - CSV data exports for further analysis
 - Responsive design for desktop and mobile viewing
 - Admin panel to dynamically add and configure charts
-- Flexible chart storage using either localStorage or database
+- PostgreSQL database for persistent chart storage
 
 ## Chart Capabilities
 
@@ -34,19 +34,70 @@ All charts feature:
 - TypeScript
 - Tailwind CSS
 - Visx (for data visualization)
-- Prisma (for database storage)
+- Prisma with PostgreSQL
 
 ## Getting Started
 
+1. Clone the repository:
 ```bash
-# Install dependencies
-npm install
+git clone https://github.com/yourusername/state_of_solana.git
+cd state_of_solana
+```
 
-# Run the development server
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up your PostgreSQL database:
+   - Create a PostgreSQL database
+   - Copy `.env.sample` to `.env` and update the `DATABASE_URL` with your database credentials:
+   ```
+   DATABASE_URL="postgresql://username:password@localhost:5432/solana_charts?schema=public"
+   ```
+
+4. Initialize the database:
+```bash
+npm run db:push
+```
+
+5. Run the development server:
+```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Deployment Options
+
+### Vercel or Netlify Deployment
+
+1. Connect your GitHub repository to Vercel or Netlify
+2. Add the `DATABASE_URL` environment variable pointing to your PostgreSQL instance
+3. Deploy the application
+
+### Railway or Heroku Deployment
+
+Both platforms provide PostgreSQL add-ons that can be easily integrated:
+
+1. Create a new project on Railway/Heroku
+2. Add a PostgreSQL database through their add-ons
+3. Connect your GitHub repository
+4. The database connection string will be automatically added to your environment variables
+5. Deploy the application
+
+### Self-Hosted Deployment
+
+1. Set up a server with Node.js and PostgreSQL
+2. Clone the repository and install dependencies
+3. Create a production build:
+```bash
+npm run build
+```
+4. Start the server:
+```bash
+npm start
+```
 
 ## Admin Panel
 
@@ -56,23 +107,6 @@ Access the admin panel at [http://localhost:3000/admin](http://localhost:3000/ad
 - Add charts to any page in the dashboard
 - Configure data sources for each chart
 - Preview charts during creation
-
-## Chart Storage
-
-Charts created in the admin panel can be stored in two ways:
-
-1. **LocalStorage (Development)**: Charts are stored in the browser's localStorage by default
-2. **Database (Production)**: For persistent storage across all users, configure with a PostgreSQL database
-
-See [README-CHARTS.md](README-CHARTS.md) for detailed setup instructions for both storage options.
-
-### Moving Charts Between Environments
-
-If you've created charts on one port or environment (e.g., localhost:3000) and need to move them to another (e.g., localhost:3001 or production):
-
-1. Use the export script in the scripts directory: `node scripts/export-charts.js`
-2. Follow the instructions to export charts from your browser's localStorage
-3. Import to the new environment using the import script: `node scripts/import-charts.js`
 
 ## Data Sources
 

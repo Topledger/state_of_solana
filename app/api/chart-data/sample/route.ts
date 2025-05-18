@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// For Next.js static export compatibility
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   // Create sample data for charts - platform revenue over time
   const data = [

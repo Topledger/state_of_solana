@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 
+// For Next.js static export compatibility
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /**
  * Generate sample data for stacked bar chart
  * This endpoint provides platform revenue segmented by category

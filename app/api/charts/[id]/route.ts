@@ -6,19 +6,19 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// GET /api/charts/[id] - Get a specific chart
+// GET /api/charts/[id]
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const { id: chartId } = await params;
+
+  console.log(`API: Fetching chart with ID ${chartId}`);
   try {
-    const chartId = params.id;
-    console.log(`API: Fetching chart with ID ${chartId}`);
-    
     const chart = await prisma.chart.findUnique({
       where: { id: chartId }
     });
-    
+
     if (!chart) {
       console.log(`API: Chart not found with ID ${chartId}`);
       return NextResponse.json(
@@ -26,14 +26,14 @@ export async function GET(
         { status: 404 }
       );
     }
-    
-    // Convert the database format back to ChartConfig format
+
+    // Parse config back to ChartConfig
     try {
       const chartConfig = {
         ...JSON.parse(chart.config as string),
         id: chart.id
-      };
-      
+      } as ChartConfig & { id: string };
+
       return NextResponse.json(chartConfig);
     } catch (parseError) {
       console.error(`API: Error parsing chart config for chart ${chart.id}:`, parseError);
@@ -43,7 +43,7 @@ export async function GET(
       );
     }
   } catch (error) {
-    console.error(`API: Error fetching chart ${params.id}:`, error);
+    console.error(`API: Error fetching chart ${chartId}:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch chart', details: String(error) },
       { status: 500 }
@@ -51,36 +51,31 @@ export async function GET(
   }
 }
 
-// PUT /api/charts/[id] - Update a chart
+// PUT /api/charts/[id]
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const { id: chartId } = await params;
   try {
-    const chartId = params.id;
-    const chartConfig = await req.json() as ChartConfig;
-    
-    // Validate the chart config
+    const chartConfig = (await req.json()) as ChartConfig;
+
+    // Basic validation
     if (!chartConfig.title || !chartConfig.page || !chartConfig.chartType) {
       return NextResponse.json(
         { error: 'Invalid chart configuration' },
         { status: 400 }
       );
     }
-    
-    // Check if chart exists
-    const existingChart = await prisma.chart.findUnique({
-      where: { id: chartId }
-    });
-    
-    if (!existingChart) {
+
+    const existing = await prisma.chart.findUnique({ where: { id: chartId } });
+    if (!existing) {
       return NextResponse.json(
         { error: 'Chart not found' },
         { status: 404 }
       );
     }
-    
-    // Update the chart
+
     await prisma.chart.update({
       where: { id: chartId },
       data: {
@@ -90,12 +85,10 @@ export async function PUT(
         updatedAt: new Date()
       }
     });
-    
-    return NextResponse.json({ 
-      message: 'Chart updated successfully' 
-    });
+
+    return NextResponse.json({ message: 'Chart updated successfully' });
   } catch (error) {
-    console.error(`Error updating chart ${params.id}:`, error);
+    console.error(`API: Error updating chart ${chartId}:`, error);
     return NextResponse.json(
       { error: 'Failed to update chart' },
       { status: 500 }
@@ -103,39 +96,28 @@ export async function PUT(
   }
 }
 
-// DELETE /api/charts/[id] - Delete a chart
+// DELETE /api/charts/[id]
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+  { params }: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const { id: chartId } = await params;
   try {
-    const chartId = params.id;
-    
-    // Check if chart exists
-    const existingChart = await prisma.chart.findUnique({
-      where: { id: chartId }
-    });
-    
-    if (!existingChart) {
+    const existing = await prisma.chart.findUnique({ where: { id: chartId } });
+    if (!existing) {
       return NextResponse.json(
         { error: 'Chart not found' },
         { status: 404 }
       );
     }
-    
-    // Delete the chart
-    await prisma.chart.delete({
-      where: { id: chartId }
-    });
-    
-    return NextResponse.json({ 
-      message: 'Chart deleted successfully' 
-    });
+
+    await prisma.chart.delete({ where: { id: chartId } });
+    return NextResponse.json({ message: 'Chart deleted successfully' });
   } catch (error) {
-    console.error(`Error deleting chart ${params.id}:`, error);
+    console.error(`API: Error deleting chart ${chartId}:`, error);
     return NextResponse.json(
       { error: 'Failed to delete chart' },
       { status: 500 }
     );
   }
-} 
+}

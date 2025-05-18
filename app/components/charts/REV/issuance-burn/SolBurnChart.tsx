@@ -987,8 +987,8 @@ const SolBurnChart: React.FC<SolBurnChartProps> = ({
                 {!modalLoading && modalData.length > 0 ? (
                   <div className="flex flex-col gap-2">
                     {getSolBurnChartMetrics({ 
-                      burn: dynamicColors.burnBar, 
-                      cumulative: dynamicColors.cumulativeLine 
+                      burn: solBurnColors.burnBar, 
+                      cumulative: solBurnColors.cumulativeLine 
                     }).map(metric => (
                       <div key={metric.key} className="flex items-start">
                         <div 

@@ -1,3 +1,7 @@
+// Prisma no longer used - keeping this file as a stub 
+// to avoid breaking imports in case there are still references
+// This app now uses localStorage for data storage
+
 import { PrismaClient, Prisma } from '@prisma/client'
 
 // For better debugging - use proper log level types
@@ -45,4 +49,4 @@ async function testConnection() {
 testConnection();
 
 // For Next.js hot reloading in development
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma 
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

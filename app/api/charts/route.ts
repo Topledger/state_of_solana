@@ -9,7 +9,7 @@ export const revalidate = 0;
 // GET /api/charts - Get all charts
 export async function GET(req: NextRequest) {
   try {
-    console.log("API: Fetching all charts...");
+    console.log("API: Fetching all charts from database...");
     const charts = await prisma.chart.findMany();
     console.log(`API: Found ${charts.length} charts`);
     
@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
     console.log("API: Creating new chart...");
     const chartConfig = await req.json() as ChartConfig;
     
-    // Log the chart config we're trying to save (without the details)
-    console.log(`API: Saving chart with ID ${chartConfig.id}, title: ${chartConfig.title}, page: ${chartConfig.page}`);
+    // Log the chart config we're trying to save
+    console.log(`API: Saving chart with ID ${chartConfig.id}, title: ${chartConfig.title}`);
     
     // Validate the chart config
     if (!chartConfig.title || !chartConfig.page || !chartConfig.chartType) {
@@ -111,8 +111,26 @@ export async function POST(req: NextRequest) {
     }
   } catch (error) {
     console.error('API: Error creating/updating chart:', error);
+    
+    // Provide more detailed error information
+    const errorMessage = error instanceof Error 
+      ? error.message
+      : 'Unknown database error';
+      
+    // Check for specific database connection errors
+    const isConnectionError = 
+      errorMessage.includes('connection') || 
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('timeout') ||
+      errorMessage.includes('prisma') ||
+      errorMessage.includes('database');
+    
     return NextResponse.json(
-      { error: 'Failed to create/update chart', details: String(error) },
+      { 
+        error: 'Failed to create/update chart', 
+        details: errorMessage,
+        type: isConnectionError ? 'database_connection' : 'general_error'
+      },
       { status: 500 }
     );
   }

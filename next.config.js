@@ -3,20 +3,8 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Only use static export in production
-  ...(process.env.NODE_ENV === 'production' ? {
-    output: 'export',
-    distDir: 'out',
-    basePath: '/state_of_solana',
-    assetPrefix: '/state_of_solana',
-    images: {
-      unoptimized: true,
-    },
-    trailingSlash: true,
-  } : {
-    // Use standard server mode in development
-    distDir: '.next',
-  }),
+  // Use regular Next.js with server-side rendering in all environments
+  // This enables API routes necessary for the database storage
   reactStrictMode: false,
 };
 
