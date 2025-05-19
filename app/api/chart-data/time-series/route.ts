@@ -1,22 +1,31 @@
 import { NextResponse } from 'next/server';
-import { timeSeriesData } from '@/lib/staticData';
 
-// Export specific configuration for static export support
-export const dynamic = 'force-static';
+// For Next.js static export compatibility
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
-  // Sample the data to return 30 days worth for basic time series
-  const result = timeSeriesData
-    .filter(item => item.platform === 'Raydium') // Filter to just one platform for simplicity
-    .slice(-30); // Get the last 30 days
-  
-  // Transform to match expected format
-  const formattedData = result.map(item => ({
-    date: item.date,
-    protocol_revenue: Math.floor(item.volume * 0.0015), // Estimate revenue as 0.15% of volume
-    cumulative_revenue: Math.floor(1000000 + (item.volume * 0.000025)) // Some arbitrary cumulative value
-  }));
+  // Generate dates for the last 30 days
+  const dates = Array.from({ length: 30 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (29 - i));
+    return date.toISOString().split('T')[0]; // YYYY-MM-DD format
+  });
+
+  // Create sample time series data - daily revenue over time
+  const data = dates.map((date, index) => {
+    // Generate a value that generally increases but with some random variation
+    const baseValue = 100000 + (index * 15000);
+    const randomVariation = Math.random() * 30000 - 15000; // Random value between -15000 and 15000
+    const value = Math.max(10000, baseValue + randomVariation);
+    
+    return {
+      date,
+      protocol_revenue: Math.floor(value),
+      cumulative_revenue: Math.floor(1000000 + (index * 50000) + (Math.random() * 10000))
+    };
+  });
 
   // Return data
-  return NextResponse.json(formattedData);
+  return NextResponse.json(data);
 } 

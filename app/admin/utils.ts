@@ -327,9 +327,9 @@ export async function saveChartConfig(config: ChartConfig): Promise<boolean> {
       }
       console.error(errorMessage);
         
-      // Fall back to localStorage if we have a server error
-      if (response.status >= 500 && typeof window !== 'undefined') {
-        console.warn('API server error, falling back to localStorage temporarily');
+      // Fall back to localStorage if we have an API error
+      if (typeof window !== 'undefined') {
+        console.warn('API error, falling back to localStorage temporarily');
         const storageKey = 'solana-charts';
         
         // Get existing configs
@@ -375,8 +375,8 @@ export async function saveChartConfig(config: ChartConfig): Promise<boolean> {
           errorMessage += ' The chart may have been saved locally as a temporary backup.';
         } else if (error.message.includes('network') || error.message.includes('connection')) {
           errorMessage += ' There appears to be a network or connection issue.';
-        } else if (error.message.includes('database')) {
-          errorMessage += ' There was an issue with the database.';
+        } else if (error.message.includes('S3')) {
+          errorMessage += ' There was an issue with S3 storage.';
         } else {
           errorMessage += ' ' + error.message;
         }

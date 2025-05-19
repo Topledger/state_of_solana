@@ -1,6 +1,6 @@
 # S3 Integration for State of Solana
 
-This application now uses Amazon S3 for storing chart configurations, which provides better reliability and scalability over the previous database-only approach.
+This application now uses Amazon S3 exclusively for storing chart configurations, providing reliability and scalability.
 
 ## Setup
 
@@ -66,17 +66,27 @@ Additional testing parameters:
 
 ## Architecture
 
-The application now uses a dual-storage approach:
+The application now uses S3 as the primary storage with a client-side fallback:
 
 1. **Primary Storage**: Amazon S3
    - All chart configurations are stored as JSON files in S3
    - Each chart gets its own file with the pattern `charts/{chartId}.json`
 
-2. **Backup Storage**: Database
-   - The existing database storage is maintained as a backup
-   - If S3 operations fail, the system falls back to the database
+2. **Client-side Fallback**: Local Storage
+   - If S3 operations fail, the client can temporarily store charts in the browser's localStorage
+   - This provides a failsafe to ensure user work isn't lost if there are connectivity issues
 
-3. **Client-side Fallback**: Local Storage
-   - If both S3 and database operations fail, the client can temporarily store charts in the browser's localStorage
+## Chart Data Structure in S3
 
-This architecture provides multiple layers of redundancy to ensure chart configurations are not lost. 
+Charts are stored in S3 with the following structure:
+
+- Each chart is a separate JSON file
+- Files are stored in a `charts/` prefix within the bucket
+- The file name pattern is `charts/{chartId}.json`
+- Each file contains a full ChartConfig object including:
+  - chart id, title, subtitle
+  - page location
+  - chart type and styling
+  - API endpoint configuration
+  - data mapping information
+  - created and updated timestamps 
