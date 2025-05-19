@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"app/admin/components/dashboard-renderer.tsx -> ./ChartRenderer\":{\"id\":\"app/admin/components/dashboard-renderer.tsx -> ./ChartRenderer\",\"files\":[\"static/chunks/_app-pages-browser_app_admin_components_ChartRenderer_tsx.js\"]}}"
