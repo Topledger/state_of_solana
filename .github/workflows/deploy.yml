@@ -41,43 +41,41 @@ jobs:
           cp -r .next/static out/_next/
           
           # Create a simple index.html that redirects to the dashboard
-          cat > out/index.html << EOL
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>State of Solana Dashboard</title>
-  <script>
-    // Correctly handle GitHub Pages with repository path
-    window.location.href = "/state_of_solana/dashboard";
-  </script>
-</head>
-<body>
-  <p>Redirecting to <a href="/state_of_solana/dashboard">State of Solana Dashboard</a>...</p>
-</body>
-</html>
-EOL
+          cat > out/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>State of Solana Dashboard</title>
+            <script>
+              window.location.href = "/state_of_solana/dashboard";
+            </script>
+          </head>
+          <body>
+            <p>Redirecting to <a href="/state_of_solana/dashboard">State of Solana Dashboard</a>...</p>
+          </body>
+          </html>
+          EOF
 
       - name: Create 404 page
         run: |
           # Create a 404 page that handles client-side routing
-          cat > out/404.html << EOL
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>State of Solana Dashboard</title>
-  <script>
-    // Get the current path and redirect to the dashboard with the proper base path
-    const path = window.location.pathname.replace('/state_of_solana', '');
-    window.location.href = "/state_of_solana/dashboard" + (path.startsWith('/') ? path : '/' + path);
-  </script>
-</head>
-<body>
-  <p>Redirecting to dashboard...</p>
-</body>
-</html>
-EOL
+          cat > out/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>State of Solana Dashboard</title>
+            <script>
+              const path = window.location.pathname.replace('/state_of_solana', '');
+              window.location.href = "/state_of_solana/dashboard" + (path.startsWith('/') ? path : '/' + path);
+            </script>
+          </head>
+          <body>
+            <p>Redirecting to dashboard...</p>
+          </body>
+          </html>
+          EOF
       
       - name: Finalize static files
         run: |
