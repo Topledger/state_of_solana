@@ -27,53 +27,19 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
       
-      - name: Disable dynamic API routes
-        run: |
-          find ./app/api -type f -name "route.ts" -exec sed -i 's/export const dynamic = "force-dynamic";/\/\/ export const dynamic = "force-dynamic";/g' {} \;
-          find ./app/api -type f -name "route.tsx" -exec sed -i 's/export const dynamic = "force-dynamic";/\/\/ export const dynamic = "force-dynamic";/g' {} \;
-      
-      - name: Update next.config.js for static export
-        run: |
-          cat > next.config.js << 'EOF'
-          /** @type {import('next').NextConfig} */
-          const nextConfig = {
-            output: 'export',
-            basePath: '/state_of_solana',
-            images: {
-              unoptimized: true,
-            },
-            reactStrictMode: false,
-            eslint: {
-              ignoreDuringBuilds: true,
-            },
-          };
-          
-          module.exports = nextConfig;
-          EOF
-      
       - name: Build
         run: npm run build
-        env:
-          NEXT_DISABLE_ESLINT: 1
-      
-      - name: Create .nojekyll
-        run: touch out/.nojekyll
-      
-      - name: Create static API responses
+
+      - name: Prepare static files
         run: |
-          # Create necessary API directories
-          mkdir -p out/state_of_solana/api/charts
-          mkdir -p out/state_of_solana/api/chart-data
+          # Create .nojekyll file
+          touch out/.nojekyll
           
-          # Create a static response for /api/charts
-          cat > out/state_of_solana/api/charts/index.html << 'EOF'
-          {"charts":[]}
-          EOF
+          # Create custom 404 page
+          cp out/index.html out/404.html
           
-          # Create static responses for chart-data
-          cat > out/state_of_solana/api/chart-data/index.html << 'EOF'
-          {"message":"Static API response"}
-          EOF
+          # Ensure README.md isn't served instead of index.html
+          cp out/index.html ./index.html
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
