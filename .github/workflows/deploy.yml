@@ -41,8 +41,12 @@ jobs:
           mkdir -p out/_next
           cp -r .next/static out/_next/
           
-          # Create index.html in out directory
-          cp index.html out/index.html || echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL=\'/_next/static/index.html\'"></head></html>' > out/index.html
+          # Create index.html in out directory if it doesn't exist
+          if [ ! -f index.html ]; then
+            echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL=/_next/static/index.html"></head></html>' > out/index.html
+          else
+            cp index.html out/index.html
+          fi
 
       - name: Prepare static files
         run: |
