@@ -48,11 +48,12 @@ jobs:
             <meta charset="utf-8">
             <title>State of Solana Dashboard</title>
             <script>
-              window.location.href = "/state_of_solana/dashboard";
+              // Redirect to base path only, not appending dashboard
+              window.location.href = "/state_of_solana/";
             </script>
           </head>
           <body>
-            <p>Redirecting to <a href="/state_of_solana/dashboard">State of Solana Dashboard</a>...</p>
+            <p>Redirecting to <a href="/state_of_solana/">State of Solana Dashboard</a>...</p>
           </body>
           </html>
           EOF
@@ -67,8 +68,11 @@ jobs:
             <meta charset="utf-8">
             <title>State of Solana Dashboard</title>
             <script>
-              const path = window.location.pathname.replace('/state_of_solana', '');
-              window.location.href = "/state_of_solana/dashboard" + (path.startsWith('/') ? path : '/' + path);
+              // Prevent infinite path appending
+              // Only redirect to the base path and let Next.js handle the routing
+              if (!window.location.pathname.includes('/dashboard')) {
+                window.location.href = "/state_of_solana/";
+              }
             </script>
           </head>
           <body>
