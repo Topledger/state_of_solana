@@ -1,34 +1,52 @@
 import { NextResponse } from 'next/server';
+import { stackedData } from '@/lib/staticData';
 
-// For Next.js static export compatibility
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Export specific configuration for static export support
+export const dynamic = 'force-static';
 
 export async function GET() {
-  // Generate sample data for stacked bar chart - platform revenue by segments
-  const data = [
-    { platform: "DEX", segment: "Raydium", protocol_revenue: 197654321.45 },
-    { platform: "DEX", segment: "Orca", protocol_revenue: 156789012.34 },
-    { platform: "DEX", segment: "Meteora", protocol_revenue: 87654321.98 },
-    { platform: "DEX", segment: "Jupiter", protocol_revenue: 76543210.87 },
-    
-    { platform: "Lending", segment: "Solend", protocol_revenue: 123456789.01 },
-    { platform: "Lending", segment: "Mango", protocol_revenue: 98765432.10 },
-    { platform: "Lending", segment: "Kamino", protocol_revenue: 87654321.09 },
-    
-    { platform: "NFT", segment: "Tensor", protocol_revenue: 143215678.90 },
-    { platform: "NFT", segment: "Magic Eden", protocol_revenue: 132456789.01 },
-    { platform: "NFT", segment: "Formfunction", protocol_revenue: 54321098.76 },
-    
-    { platform: "Liquid Staking", segment: "Marinade", protocol_revenue: 112345678.90 },
-    { platform: "Liquid Staking", segment: "Jito", protocol_revenue: 98765432.10 },
-    { platform: "Liquid Staking", segment: "Lido", protocol_revenue: 87654321.09 },
-    
-    { platform: "Other", segment: "DePIN", protocol_revenue: 65432109.87 },
-    { platform: "Other", segment: "Bots", protocol_revenue: 54321098.76 },
-    { platform: "Other", segment: "Launchpad", protocol_revenue: 43210987.65 }
-  ];
+  // Format the data to match expected structure
+  const platformMap = {
+    'Swaps': 'DEX',
+    'Liquidity': 'DEX',
+    'Staking': 'Liquid Staking',
+    'Lending': 'Lending',
+    'Options': 'Other'
+  };
+  
+  const segmentMap = {
+    'Swaps': ['Raydium', 'Orca', 'Jupiter', 'Meteora'],
+    'Liquidity': ['Raydium', 'Orca', 'Meteora'],
+    'Staking': ['Marinade', 'Jito', 'Lido'],
+    'Lending': ['Solend', 'Mango', 'Kamino'],
+    'Options': ['Zeta', 'PsyOptions']
+  };
+  
+  // Get the most recent data point
+  const latestData = stackedData[stackedData.length - 1];
+  
+  // Transform to expected format
+  const result = Object.entries(latestData)
+    .filter(([key]) => key !== 'date')
+    .flatMap(([category, value]) => {
+      const platform = platformMap[category as keyof typeof platformMap] || 'Other';
+      const segments = segmentMap[category as keyof typeof segmentMap] || ['Other'];
+      
+      // Distribute the value across segments
+      return segments.map((segment, index) => {
+        // Distribute values with some variation
+        const share = 1 / segments.length;
+        const variance = 0.2 * (Math.random() - 0.5); // -0.1 to +0.1
+        const adjustedShare = Math.max(0.1, share + variance);
+        
+        return {
+          platform,
+          segment,
+          protocol_revenue: Math.floor((value as number) * adjustedShare)
+        };
+      });
+    });
 
   // Return data
-  return NextResponse.json(data);
+  return NextResponse.json(result);
 } 

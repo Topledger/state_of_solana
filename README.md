@@ -112,6 +112,60 @@ Access the admin panel at [http://localhost:3000/admin](http://localhost:3000/ad
 
 This dashboard uses data from TopLedger's analytics API to provide accurate and up-to-date metrics on Solana's DeFi ecosystem.
 
+## S3 Integration
+
+This application uses Amazon S3 for storing chart configurations, which provides better reliability and scalability. The AWS bucket name is `tl-state-of-solana`.
+
+### AWS Setup Required
+
+For the S3 integration to work, you need to configure:
+
+1. Add your AWS credentials to `.env.local`:
+   ```
+   AWS_REGION=us-east-1
+   AWS_ACCESS_KEY_ID=your_access_key_here
+   AWS_SECRET_ACCESS_KEY=your_secret_key_here
+   ```
+
+2. Ensure the IAM user associated with your access keys has the necessary S3 permissions:
+   - `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket`
+
+## Deployment
+
+This project is configured for static deployment to GitHub Pages.
+
+### Deployment Process
+
+For GitHub Pages deployment, use:
+
+```bash
+npm run deploy:script
+```
+
+This script handles:
+1. Temporarily disabling server-only API routes
+2. Building the static site
+3. Creating the `.nojekyll` file
+4. Deploying to GitHub Pages
+5. Restoring API routes for local development
+
+### API Limitations
+
+When deployed as a static site on GitHub Pages:
+- Server-side API routes don't function
+- Chart creation and editing is disabled
+- Static data is used for charts and visualizations
+
+## Development
+
+For local development with full functionality:
+
+```bash
+npm run dev
+```
+
+This will start the development server with all API routes and database functionality enabled.
+
 ## License
 
 MIT

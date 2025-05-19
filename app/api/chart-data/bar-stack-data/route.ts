@@ -1,42 +1,39 @@
 import { NextResponse } from 'next/server';
+import { barStackData } from '@/lib/staticData';
 
-// For Next.js static export compatibility
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Export specific configuration for static export support
+export const dynamic = 'force-static';
 
 /**
  * Generate sample data for stacked bar chart
  * This endpoint provides platform revenue segmented by category
  */
 export async function GET() {
-  // Generate sample data
-  const platforms = ['Raydium', 'Orca', 'Meteora', 'Drift', 'Mango Markets', 'Marinade', 'Jito', 'Solend', 'Zeta', 'Tensor'];
-  const segments = ['DEX', 'Lending', 'NFT', 'Liquid Staking'];
-  
-  const data = platforms.flatMap(platform => {
-    return segments.map(segment => {
-      // Generate a semi-random revenue value, higher for DEX and popular platforms
-      let baseValue = 0;
-      
-      if (segment === 'DEX') {
-        baseValue = Math.random() * 1000000 + 500000; // DEX revenue tends to be higher
-      } else if (segment === 'NFT' && platform === 'Tensor') {
-        baseValue = Math.random() * 800000 + 400000; // Tensor is strong in NFT
-      } else if (segment === 'Liquid Staking' && (platform === 'Marinade' || platform === 'Jito')) {
-        baseValue = Math.random() * 700000 + 300000; // Marinade and Jito are liquid staking protocols
-      } else if (segment === 'Lending' && (platform === 'Solend' || platform === 'Mango Markets')) {
-        baseValue = Math.random() * 600000 + 200000; // Lending protocols
-      } else {
-        baseValue = Math.random() * 200000 + 50000; // Other combinations
-      }
-      
-      return {
+  // Transform bar stack data to the expected format
+  const result = barStackData.flatMap(platformData => {
+    const platform = platformData.platform;
+    
+    // Map categories to segments
+    const categorySegmentMap = {
+      'Trading Fees': 'DEX',
+      'Staking Rewards': 'Liquid Staking',
+      'Liquidations': 'Lending',
+      'Other Revenue': 'Other'
+    };
+    
+    // Extract revenue values for each category
+    return Object.entries(platformData)
+      .filter(([key]) => 
+        key !== 'platform' && 
+        key !== 'total' && 
+        typeof platformData[key] === 'number'
+      )
+      .map(([category, value]) => ({
         platform,
-        segment,
-        protocol_revenue: Math.round(baseValue),
-      };
-    });
+        segment: categorySegmentMap[category as keyof typeof categorySegmentMap] || 'Other',
+        protocol_revenue: value as number
+      }));
   });
   
-  return NextResponse.json(data);
+  return NextResponse.json(result);
 } 
