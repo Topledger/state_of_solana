@@ -35,26 +35,54 @@ jobs:
       - name: Create out directory
         run: mkdir -p out
       
-      - name: Copy static files
+      - name: Copy Next.js output
         run: |
-          # Copy static files from .next/static to out/static
-          mkdir -p out/_next
+          # Copy all static assets from .next
           cp -r .next/static out/_next/
           
-          # Create index.html in out directory if it doesn't exist
-          if [ ! -f index.html ]; then
-            echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;URL=/_next/static/index.html"></head></html>' > out/index.html
-          else
-            cp index.html out/index.html
-          fi
+          # Create a simple index.html that redirects to the dashboard
+          cat > out/index.html << EOL
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>State of Solana Dashboard</title>
+  <script>
+    // Correctly handle GitHub Pages with repository path
+    window.location.href = "/state_of_solana/dashboard";
+  </script>
+</head>
+<body>
+  <p>Redirecting to <a href="/state_of_solana/dashboard">State of Solana Dashboard</a>...</p>
+</body>
+</html>
+EOL
 
-      - name: Prepare static files
+      - name: Create 404 page
         run: |
-          # Create .nojekyll file
+          # Create a 404 page that handles client-side routing
+          cat > out/404.html << EOL
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>State of Solana Dashboard</title>
+  <script>
+    // Get the current path and redirect to the dashboard with the proper base path
+    const path = window.location.pathname.replace('/state_of_solana', '');
+    window.location.href = "/state_of_solana/dashboard" + (path.startsWith('/') ? path : '/' + path);
+  </script>
+</head>
+<body>
+  <p>Redirecting to dashboard...</p>
+</body>
+</html>
+EOL
+      
+      - name: Finalize static files
+        run: |
+          # Create .nojekyll file to disable Jekyll processing
           touch out/.nojekyll
-          
-          # Create custom 404 page
-          cp out/index.html out/404.html
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
