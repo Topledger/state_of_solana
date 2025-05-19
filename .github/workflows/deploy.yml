@@ -27,6 +27,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
       
+      - name: Disable dynamic API routes
+        run: |
+          find ./app/api -type f -name "route.ts" -exec sed -i 's/export const dynamic = "force-dynamic";/\/\/ export const dynamic = "force-dynamic";/g' {} \;
+          find ./app/api -type f -name "route.tsx" -exec sed -i 's/export const dynamic = "force-dynamic";/\/\/ export const dynamic = "force-dynamic";/g' {} \;
+      
       - name: Update next.config.js for static export
         run: |
           cat > next.config.js << 'EOF'
@@ -41,62 +46,6 @@ jobs:
             eslint: {
               ignoreDuringBuilds: true,
             },
-            // Exclude API routes from static export
-            exportPathMap: async function (
-              defaultPathMap,
-              { dev, dir, outDir, distDir, buildId }
-            ) {
-              // Only include non-API routes
-              const pathMap = {};
-              
-              // Add root paths
-              pathMap['/'] = { page: '/' };
-              pathMap['/dashboard'] = { page: '/dashboard' };
-              pathMap['/debug-colors'] = { page: '/debug-colors' };
-              
-              // Add dex routes
-              pathMap['/dex'] = { page: '/dex' };
-              pathMap['/dex/aggregators'] = { page: '/dex/aggregators' };
-              pathMap['/dex/summary'] = { page: '/dex/summary' };
-              pathMap['/dex/traders'] = { page: '/dex/traders' };
-              pathMap['/dex/tvl'] = { page: '/dex/tvl' };
-              pathMap['/dex/volume'] = { page: '/dex/volume' };
-              
-              // Add admin routes
-              pathMap['/admin'] = { page: '/admin' };
-              pathMap['/admin/chart-creator'] = { page: '/admin/chart-creator' };
-              pathMap['/admin/manage-charts'] = { page: '/admin/manage-charts' };
-              
-              // Add other routes
-              pathMap['/examples'] = { page: '/examples' };
-              pathMap['/market-dynamics'] = { page: '/market-dynamics' };
-              pathMap['/network-usage'] = { page: '/network-usage' };
-              
-              // Protocol revenue routes
-              pathMap['/protocol-revenue'] = { page: '/protocol-revenue' };
-              pathMap['/protocol-revenue/depin'] = { page: '/protocol-revenue/depin' };
-              pathMap['/protocol-revenue/dex-ecosystem'] = { page: '/protocol-revenue/dex-ecosystem' };
-              pathMap['/protocol-revenue/nft-ecosystem'] = { page: '/protocol-revenue/nft-ecosystem' };
-              pathMap['/protocol-revenue/summary'] = { page: '/protocol-revenue/summary' };
-              pathMap['/protocol-revenue/total'] = { page: '/protocol-revenue/total' };
-              
-              // REV routes
-              pathMap['/rev'] = { page: '/rev' };
-              pathMap['/rev/cost-capacity'] = { page: '/rev/cost-capacity' };
-              pathMap['/rev/issuance-burn'] = { page: '/rev/issuance-burn' };
-              pathMap['/rev/total-economic-value'] = { page: '/rev/total-economic-value' };
-              
-              // Stablecoins routes
-              pathMap['/stablecoins'] = { page: '/stablecoins' };
-              pathMap['/stablecoins/liquidity-velocity'] = { page: '/stablecoins/liquidity-velocity' };
-              pathMap['/stablecoins/mint-burn'] = { page: '/stablecoins/mint-burn' };
-              pathMap['/stablecoins/platform-exchange'] = { page: '/stablecoins/platform-exchange' };
-              pathMap['/stablecoins/stablecoin-usage'] = { page: '/stablecoins/stablecoin-usage' };
-              pathMap['/stablecoins/transaction-activity'] = { page: '/stablecoins/transaction-activity' };
-              pathMap['/stablecoins/tvl'] = { page: '/stablecoins/tvl' };
-              
-              return pathMap;
-            },
           };
           
           module.exports = nextConfig;
@@ -110,14 +59,20 @@ jobs:
       - name: Create .nojekyll
         run: touch out/.nojekyll
       
-      - name: Create placeholder API responses
+      - name: Create static API responses
         run: |
-          # Create a directory structure for API routes
+          # Create necessary API directories
           mkdir -p out/state_of_solana/api/charts
+          mkdir -p out/state_of_solana/api/chart-data
           
-          # Create a sample response for /api/charts
+          # Create a static response for /api/charts
           cat > out/state_of_solana/api/charts/index.html << 'EOF'
           {"charts":[]}
+          EOF
+          
+          # Create static responses for chart-data
+          cat > out/state_of_solana/api/chart-data/index.html << 'EOF'
+          {"message":"Static API response"}
           EOF
       
       - name: Setup Pages
