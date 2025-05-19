@@ -98,7 +98,7 @@ const BrushTimeScale: React.FC<BrushTimeScaleProps> = ({
               // Reset to full width with slight padding
               selectionRect.setAttribute('width', String(containerWidth - 4));
               selectionRect.setAttribute('x', '2');
-              console.log(`Reset brush to width: ${containerWidth - 4}, x: 2`);
+              console.log(`Reset brush to width: ${containerWidth-4}, x: 2`);
             } else {
               console.log('Could not find brush elements within SVG');
             }

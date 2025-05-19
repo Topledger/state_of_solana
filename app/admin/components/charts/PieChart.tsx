@@ -129,7 +129,7 @@ const PieChart: React.FC<PieChartProps> = ({
     
     // Return with correct unit placement (or no unit if not specified)
     if (!unitSymbol) return formattedValue;
-    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}${unitSymbol}`;
+    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}\u00A0${unitSymbol}`;
   }, []);
 
   // Transform raw data into pie chart format
@@ -338,6 +338,7 @@ const PieChart: React.FC<PieChartProps> = ({
             left={tooltip.left}
             top={tooltip.top}
             isModal={false}
+            currencyFilter={filterValues?.currencyFilter}
           />
         )}
         
@@ -408,7 +409,7 @@ const PieChart: React.FC<PieChartProps> = ({
     );
   }, [
     pieData, error, refreshData, handleMouseLeave,
-    tooltip, colorScale, formatValue, yUnit
+    tooltip, colorScale, formatValue, yUnit, filterValues
   ]);
 
   // Render the chart with legends
@@ -496,6 +497,7 @@ const PieChart: React.FC<PieChartProps> = ({
                         left={0}
                         top={0}
                         isModal={true}
+                        currencyFilter={modalFilterValues?.currencyFilter || filterValues?.currencyFilter}
                       />
                     </div>
                   )}

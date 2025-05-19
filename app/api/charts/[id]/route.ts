@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ChartConfig } from '@/app/admin/types';
 import { prisma } from '@/lib/prisma';
+import { getFromS3, saveToS3, deleteFromS3 } from '@/lib/s3';
 
 // For Next.js static export compatibility
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,15 @@ export async function GET(
 
   console.log(`API: Fetching chart with ID ${chartId}`);
   try {
+    // Try to get from S3 first
+    const s3Chart = await getFromS3<ChartConfig>(`charts/${chartId}.json`);
+    if (s3Chart) {
+      console.log(`API: Found chart in S3 with ID ${chartId}`);
+      return NextResponse.json(s3Chart);
+    }
+    
+    // Fall back to database
+    console.log(`API: Chart not found in S3, checking database for ID ${chartId}`);
     const chart = await prisma.chart.findUnique({
       where: { id: chartId }
     });
@@ -33,6 +43,9 @@ export async function GET(
         ...JSON.parse(chart.config as string),
         id: chart.id
       } as ChartConfig & { id: string };
+      
+      // Save to S3 for future requests
+      await saveToS3(`charts/${chartId}.json`, chartConfig);
 
       return NextResponse.json(chartConfig);
     } catch (parseError) {
@@ -68,10 +81,14 @@ export async function PUT(
       );
     }
 
+    // Update in S3
+    const s3Result = await saveToS3(`charts/${chartId}.json`, chartConfig);
+    
+    // Also update in database as backup
     const existing = await prisma.chart.findUnique({ where: { id: chartId } });
     if (!existing) {
       return NextResponse.json(
-        { error: 'Chart not found' },
+        { error: 'Chart not found in database' },
         { status: 404 }
       );
     }
@@ -86,7 +103,9 @@ export async function PUT(
       }
     });
 
-    return NextResponse.json({ message: 'Chart updated successfully' });
+    return NextResponse.json({ 
+      message: s3Result ? 'Chart updated in S3 and database' : 'Chart updated in database only' 
+    });
   } catch (error) {
     console.error(`API: Error updating chart ${chartId}:`, error);
     return NextResponse.json(
@@ -103,10 +122,14 @@ export async function DELETE(
 ): Promise<NextResponse> {
   const { id: chartId } = await params;
   try {
+    // Delete from S3
+    await deleteFromS3(`charts/${chartId}.json`);
+    
+    // Also delete from database
     const existing = await prisma.chart.findUnique({ where: { id: chartId } });
     if (!existing) {
       return NextResponse.json(
-        { error: 'Chart not found' },
+        { error: 'Chart not found in database' },
         { status: 404 }
       );
     }

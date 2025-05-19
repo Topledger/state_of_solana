@@ -4,8 +4,13 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getAllChartConfigs, deleteChartConfig, getChartConfigsByPage } from '../utils';
 import { AVAILABLE_PAGES, ChartConfig } from '../types';
-import ChartRenderer from '../components/ChartRenderer';
 import Button from '../components/Button';
+import dynamic from 'next/dynamic';
+
+// Dynamic import DashboardRenderer to avoid SSR issues
+const DashboardRenderer = dynamic(() => import('../components/dashboard-renderer'), {
+  ssr: false,
+});
 
 // Add a helper function to format the Y-Axis display value
 const formatYAxisValue = (yAxis: string | string[] | any[] | { field: string } | Array<string | { field: string }>): string => {
@@ -36,20 +41,93 @@ const formatYAxisValue = (yAxis: string | string[] | any[] | { field: string } |
 
 export default function ManageChartsPage() {
   const [charts, setCharts] = useState<ChartConfig[]>([]);
+  const [selectedMenu, setSelectedMenu] = useState<string>('');
   const [selectedPage, setSelectedPage] = useState<string>('all');
+  const [availablePages, setAvailablePages] = useState<Array<{id: string, name: string, path: string}>>([]);
   const [isClient, setIsClient] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState<Record<string, boolean>>({});
 
-  // Load charts from local storage when component mounts
+  // Update available pages when menu selection changes
+  useEffect(() => {
+    if (!selectedMenu) {
+      setAvailablePages([]);
+      return;
+    }
+    
+    // Define pages for each menu
+    switch (selectedMenu) {
+      case 'overview':
+        setAvailablePages([
+          { id: 'dashboard', name: 'User Activity', path: '/dashboard' },
+          { id: 'network-usage', name: 'Network Usage', path: '/network-usage' },
+          { id: 'protocol-rev', name: 'Protocol Revenue', path: '/protocol-rev' },
+          { id: 'market-dynamics', name: 'Market Dynamics', path: '/market-dynamics' }
+        ]);
+        break;
+      case 'dex':
+        setAvailablePages([
+          { id: 'summary', name: 'Summary', path: '/dex/summary' },
+          { id: 'volume', name: 'Volume', path: '/dex/volume' },
+          { id: 'tvl', name: 'TVL', path: '/dex/tvl' },
+          { id: 'traders', name: 'Traders', path: '/dex/traders' },
+          { id: 'aggregators', name: 'DEX Aggregators', path: '/dex/aggregators' }
+        ]);
+        break;
+      case 'rev':
+        setAvailablePages([
+          { id: 'overview', name: 'Summary', path: '/rev' },
+          { id: 'cost-capacity', name: 'Cost & Capacity', path: '/rev/cost-capacity' },
+          { id: 'issuance-burn', name: 'Issuance & Burn', path: '/rev/issuance-burn' },
+          { id: 'total-economic-value', name: 'Total Economic Value', path: '/rev/total-economic-value' },
+          { id: 'breakdown', name: 'Breakdown', path: '/rev/breakdown' }
+        ]);
+        break;
+      case 'stablecoins':
+        setAvailablePages([
+          { id: 'stablecoin-usage', name: 'Stablecoin Usage', path: '/stablecoins/stablecoin-usage' },
+          { id: 'transaction-activity', name: 'Transaction Activity', path: '/stablecoins/transaction-activity' },
+          { id: 'liquidity-velocity', name: 'Liquidity Velocity', path: '/stablecoins/liquidity-velocity' },
+          { id: 'mint-burn', name: 'Mint & Burn', path: '/stablecoins/mint-burn' },
+          { id: 'platform-exchange', name: 'Platform & Exchange', path: '/stablecoins/platform-exchange' },
+          { id: 'tvl', name: 'TVL', path: '/stablecoins/tvl' }
+        ]);
+        break;
+      case 'protocol-revenue':
+        setAvailablePages([
+          { id: 'summary', name: 'Summary', path: '/protocol-revenue/summary' },
+          { id: 'total', name: 'Total', path: '/protocol-revenue/total' },
+          { id: 'dex-ecosystem', name: 'DEX Ecosystem', path: '/protocol-revenue/dex-ecosystem' },
+          { id: 'nft-ecosystem', name: 'NFT Ecosystem', path: '/protocol-revenue/nft-ecosystem' },
+          { id: 'depin', name: 'DePin', path: '/protocol-revenue/depin' }
+        ]);
+        break;
+      default:
+        setAvailablePages([]);
+    }
+    
+    // Reset the page selection when menu changes
+    setSelectedPage('all');
+  }, [selectedMenu]);
+
+  // Load charts from local storage when component mounts or filters change
   useEffect(() => {
     setIsClient(true);
     
     const loadCharts = async () => {
       try {
         let allCharts;
-        if (selectedPage === 'all') {
+        if (selectedPage === 'all' && !selectedMenu) {
+          // All charts from all menus
           allCharts = await getAllChartConfigs();
+        } else if (selectedPage === 'all' && selectedMenu) {
+          // All charts from selected menu
+          const menuCharts = await getAllChartConfigs();
+          allCharts = menuCharts.filter(chart => {
+            // Check if chart page matches any page in the selected menu
+            return availablePages.some(page => page.id === chart.page);
+          });
         } else {
+          // Specific page charts
           allCharts = await getChartConfigsByPage(selectedPage);
         }
         
@@ -62,7 +140,7 @@ export default function ManageChartsPage() {
     };
     
     loadCharts();
-  }, [selectedPage]);
+  }, [selectedMenu, selectedPage, availablePages]);
 
   // Handle chart deletion
   const handleDeleteChart = async (chartId: string) => {
@@ -71,6 +149,12 @@ export default function ManageChartsPage() {
         const success = await deleteChartConfig(chartId);
         if (success) {
           setCharts(prevCharts => prevCharts.filter(chart => chart.id !== chartId));
+          // Also update the isPreviewOpen state
+          setIsPreviewOpen(prev => {
+            const updated = { ...prev };
+            delete updated[chartId];
+            return updated;
+          });
         } else {
           throw new Error("Failed to delete chart");
         }
@@ -89,6 +173,11 @@ export default function ManageChartsPage() {
     }));
   };
 
+  // Handle menu selection change
+  const handleMenuChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedMenu(e.target.value);
+  };
+
   if (!isClient) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -105,7 +194,7 @@ export default function ManageChartsPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="border-b border-gray-200 pb-5 mb-6 flex justify-between items-center">
+      <div className="border-b border-gray-200 pb-5 mb-4 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Manage Charts</h1>
           <p className="mt-2 text-sm text-gray-500">View, preview, and manage charts you've created</p>
@@ -117,26 +206,43 @@ export default function ManageChartsPage() {
         </Link>
       </div>
       
+      {/* Filter by menu */}
+      <div className="flex flex-row gap-4">
+      <div className="mb-4">
+        
+        <select
+          id="menuFilter"
+          value={selectedMenu}
+          onChange={handleMenuChange}
+          className="mt-1 block w-full pl-3 pr-10 py-2 text-base text-gray-400  rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-gray-500 sm:text-sm"
+        >
+          <option value="">All Menus</option>
+          <option value="overview">Overview</option>
+          <option value="dex">DEX</option>
+          <option value="rev">REV</option>
+          <option value="stablecoins">Stablecoins</option>
+          <option value="protocol-revenue">Protocol Revenue</option>
+        </select>
+      </div>
+      
       {/* Filter by page */}
       <div className="mb-6">
-        <label htmlFor="pageFilter" className="block text-sm font-medium text-gray-700 mb-1">
-          Filter by Page
-        </label>
         <select
           id="pageFilter"
           value={selectedPage}
           onChange={(e) => setSelectedPage(e.target.value)}
-          className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          className="mt-1 block w-full pl-3 pr-10 py-2 text-base text-gray-400 border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          disabled={!selectedMenu && selectedPage !== 'all'}
         >
           <option value="all">All Pages</option>
-          {AVAILABLE_PAGES.map((page) => (
+          {availablePages.map((page) => (
             <option key={page.id} value={page.id}>
               {page.name}
             </option>
           ))}
         </select>
       </div>
-      
+      </div>
       {/* Charts list */}
       {charts.length === 0 ? (
         <div className="bg-gray-50 p-8 rounded-lg text-center">
@@ -145,9 +251,11 @@ export default function ManageChartsPage() {
           </svg>
           <h3 className="text-lg font-medium text-gray-900 mb-2">No charts found</h3>
           <p className="text-gray-500 mb-4">
-            {selectedPage === 'all' 
-              ? "You haven't created any charts yet." 
-              : `No charts found for the selected page: ${AVAILABLE_PAGES.find(p => p.id === selectedPage)?.name}`}
+            {selectedMenu === '' && selectedPage === 'all'
+              ? "You haven't created any charts yet."
+              : selectedMenu !== '' && selectedPage === 'all'
+                ? `No charts found for the selected menu: ${selectedMenu}`
+                : `No charts found for the selected page: ${availablePages.find(p => p.id === selectedPage)?.name || selectedPage}`}
           </p>
           <Link href="/admin/chart-creator">
             <Button variant="primary">
@@ -164,7 +272,14 @@ export default function ManageChartsPage() {
                   <h3 className="text-lg font-medium text-gray-900">{chart.title}</h3>
                   <p className="text-sm text-gray-500">
                     {chart.subtitle || 'No subtitle'} • 
-                    <span className="ml-1">{AVAILABLE_PAGES.find(p => p.id === chart.page)?.name}</span>
+                    <span className="ml-1">
+                      {(() => {
+                        // Find the page info
+                        const allPages = [...AVAILABLE_PAGES, ...availablePages] as Array<{id: string, name: string, path: string}>;
+                        const pageInfo = allPages.find(p => p.id === chart.page);
+                        return pageInfo ? pageInfo.name : chart.page;
+                      })()}
+                    </span>
                   </p>
                 </div>
                 <div className="flex space-x-2">
@@ -176,7 +291,12 @@ export default function ManageChartsPage() {
                     {isPreviewOpen[chart.id] ? 'Hide Preview' : 'Show Preview'}
                   </Button>
                   <Link 
-                    href={AVAILABLE_PAGES.find(p => p.id === chart.page)?.path || '#'}
+                    href={(() => {
+                      // Find the page path
+                      const allPages = [...AVAILABLE_PAGES, ...availablePages] as Array<{id: string, name: string, path: string}>;
+                      const pageInfo = allPages.find(p => p.id === chart.page);
+                      return pageInfo?.path || '#';
+                    })()}
                     target="_blank"
                   >
                     <Button
@@ -218,10 +338,16 @@ export default function ManageChartsPage() {
                 </div>
               </div>
               
-              {/* Chart preview */}
+              {/* Chart preview using DashboardRenderer */}
               {isPreviewOpen[chart.id] && (
                 <div className="p-4 border-t border-gray-200">
-                  <ChartRenderer chartConfig={chart} />
+                  <div className="h-[500px] overflow-auto">
+                    <DashboardRenderer 
+                    
+                      pageId="preview" 
+                      overrideCharts={[chart]}
+                    />
+                  </div>
                 </div>
               )}
             </div>

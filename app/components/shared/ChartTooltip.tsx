@@ -20,6 +20,7 @@ interface ChartTooltipProps {
   left: number;
   isModal?: boolean;
   timeFilter?: string;
+  currencyFilter?: string;
 }
 
 // Function to render the shape for a legend item
@@ -88,6 +89,86 @@ const formatTooltipTitle = (title: string, timeFilter?: string): string => {
   return title;
 };
 
+// Helper function to apply currency formatting based on the selected currency
+const formatValueWithCurrency = (value: string | number, currencyFilter?: string): string => {
+  // If value is already a string (possibly pre-formatted), return it as is
+  if (typeof value === 'string') {
+    // If a currency filter is selected and the value starts with a currency symbol
+    // that doesn't match the selected currency, replace it
+    if (currencyFilter) {
+      // Common currency symbols to detect and replace
+      const currencySymbols = {
+        'USD': '$',
+        'EUR': '€',
+        'GBP': '£',
+        'JPY': '¥',
+        'CNY': '¥',
+        'SOL': 'SOL'
+      };
+      
+      // Get the selected currency symbol
+      const selectedSymbol = currencySymbols[currencyFilter as keyof typeof currencySymbols] || currencyFilter;
+      
+      // Handle SOL currency specially because it goes after the number
+      if (currencyFilter === 'SOL') {
+        // Check if value already has SOL
+        if (value.includes('SOL')) {
+          return value;
+        }
+        
+        // Check for other currency symbols at the beginning and remove them
+        for (const [currency, symbol] of Object.entries(currencySymbols)) {
+          if (currency !== 'SOL' && value.startsWith(symbol)) {
+            // Remove the symbol and add SOL at the end with a space
+            return `${value.substring(symbol.length)} SOL`;
+          }
+        }
+        
+        // If no currency symbol was found, just add SOL at the end
+        return `${value} SOL`;
+      }
+      
+      // For other currencies, use normal replacement
+      // Check if the value starts with a different currency symbol
+      for (const [currency, symbol] of Object.entries(currencySymbols)) {
+        if (value.startsWith(symbol) && currency !== currencyFilter) {
+          // Replace the symbol with the selected currency
+          return value.replace(symbol, selectedSymbol);
+        }
+      }
+    }
+    return value;
+  }
+  
+  // For numeric values without pre-formatting
+  if (typeof value === 'number') {
+    if (currencyFilter) {
+      // Apply the selected currency to the number
+      switch (currencyFilter) {
+        case 'USD':
+          return `$${value.toLocaleString()}`;
+        case 'EUR':
+          return `€${value.toLocaleString()}`;
+        case 'GBP':
+          return `£${value.toLocaleString()}`;
+        case 'JPY':
+        case 'CNY':
+          return `¥${value.toLocaleString()}`;
+        case 'SOL':
+          return `${value.toLocaleString()} SOL`;
+        default:
+          return `${currencyFilter}${value.toLocaleString()}`;
+      }
+    }
+    
+    // Default formatting if no currency filter
+    return value.toLocaleString();
+  }
+  
+  // Fallback
+  return String(value);
+};
+
 // Main tooltip component
 const ChartTooltip: React.FC<ChartTooltipProps> = ({ 
   title, 
@@ -95,7 +176,8 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
   top, 
   left, 
   isModal = false,
-  timeFilter
+  timeFilter,
+  currencyFilter
 }) => {
   // Calculate if tooltip should be positioned right to left (to avoid edge cutoff)
   const shouldFlipX = left > (isModal ? 500 : 250);
@@ -135,7 +217,9 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
                 </span>
               )}
             </div>
-            <span className="text-gray-300 font-normal ml-4">{item.value}</span>
+            <span className="text-gray-300 font-normal ml-4">
+              {formatValueWithCurrency(item.value, currencyFilter)}
+            </span>
           </div>
         ))}
       </div>

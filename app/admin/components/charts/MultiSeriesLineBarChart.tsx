@@ -89,7 +89,7 @@ function formatWithUnit(value: number, unit?: string, defaultUnit?: string): str
   
   // Return with correct unit placement (or no unit if not specified)
   if (!unitSymbol) return formattedValue;
-  return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}${unitSymbol}`;
+  return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}\u00A0${unitSymbol}`;
 }
 
 // Helper function to format X-axis tick labels
@@ -344,8 +344,8 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
 
   // Format value for tooltip
   const formatValue = useCallback((value: number) => {
-    return formatWithUnit(value, yAxisUnit);
-  }, [yAxisUnit]);
+    return formatWithUnit(value);
+  }, []);
 
   // Format y-axis tick value with appropriate units
   const formatTickValue = useCallback((value: number) => {
@@ -369,7 +369,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
     } else {
       return value.toFixed(0);
     }
-  }, [yAxisUnit]);
+  }, []);
 
   // Placeholder for refresh data functionality
   const refreshData = useCallback(() => {
@@ -530,7 +530,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
 
           return {
             label: field,
-            value: formatWithUnit(Number(dataPoint[field]) || 0, fieldUnit, yAxisUnit),
+            value: formatWithUnit(Number(dataPoint[field]) || 0, fieldUnit),
             color: fieldColors[field] || blue,
             // Use different shape for bar vs line
             shape: fieldTypes[field] === 'line' ? 'circle' as 'circle' : 'square' as 'square'
@@ -539,9 +539,19 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
       
       // If no values found, show placeholder
       if (tooltipItems.length === 0 && fields.length > 0) {
+        // Find the unit for the first field
+        let firstFieldUnit = undefined;
+        if (Array.isArray(yField) && fields.length > 0) {
+          const firstFieldConfig = yField.find(f => {
+            const fName = typeof f === 'string' ? f : f.field;
+            return fName === fields[0];
+          });
+          firstFieldUnit = typeof firstFieldConfig === 'string' ? undefined : firstFieldConfig?.unit;
+        }
+        
         tooltipItems.push({
           label: fields[0],
-          value: formatWithUnit(0, undefined, yAxisUnit),
+          value: formatWithUnit(0, firstFieldUnit),
           color: fieldColors[fields[0]] || blue,
           shape: fieldTypes[fields[0]] === 'line' ? 'circle' as 'circle' : 'square' as 'square'
         });
@@ -563,7 +573,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
         top: tooltipTop
       }));
     }
-  }, [chartData, fields, xKey, fieldColors, fieldTypes, formatWithUnit, tooltip, yAxisUnit, yField]);
+  }, [chartData, fields, xKey, fieldColors, fieldTypes, formatWithUnit, tooltip, yField]);
 
   // Process brush data
   const brushData = useMemo(() => {
@@ -794,6 +804,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
             top={tooltip.top}
             isModal={false}
             timeFilter={filterValues?.timeFilter}
+            currencyFilter={filterValues?.currencyFilter}
           />
         )}
         
@@ -953,7 +964,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
     if (!brushData || brushData.length === 0) return null;
     
     return (
-      <div className="h-[18%] w-full mt-2">
+      <div className="h-[15%] w-full mt-2">
         <BrushTimeScale
           data={brushData}
           activeBrushDomain={modalView ? modalBrushDomain : brushDomain}
@@ -1059,6 +1070,7 @@ const MultiSeriesLineBarChart: React.FC<MultiSeriesLineBarChartProps> = ({
                         top={0}
                         isModal={true}
                         timeFilter={modalFilterValues?.timeFilter}
+                        currencyFilter={modalFilterValues?.currencyFilter || filterValues?.currencyFilter}
                       />
                     </div>
                   )}

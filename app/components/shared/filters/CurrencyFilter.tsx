@@ -159,10 +159,10 @@ const CurrencyFilter: React.FC<CurrencyFilterProps> = ({
   // For 3 or more options, display as dropdown
   return (
     <div className="flex items-center">
-      {!isCompact && <span className="text-xs text-gray-400 mr-2">{label}:</span>}
+      {!isCompact && <span className="text-xs text-gray-400"></span>}
       <div 
         ref={triggerRef}
-        className="flex items-center space-x-1 bg-gray-900/60 rounded-md px-2 py-1 cursor-pointer"
+        className="flex items-center space-x-1 bg-gray-800/60 rounded-md py-0.5 px-2 cursor-pointer"
         onClick={() => {
           updateDropdownPosition();
           setIsOpen(!isOpen);

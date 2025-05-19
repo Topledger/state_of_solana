@@ -81,7 +81,7 @@ function formatWithUnit(value: number, unit?: string, defaultUnit?: string): str
   
   // Return with correct unit placement (or no unit if not specified)
   if (!unitSymbol) return formattedValue;
-  return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}${unitSymbol}`;
+  return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}\u00A0${unitSymbol}`;
 }
 
 const DualAxisChart: React.FC<DualAxisChartProps> = ({ 
@@ -96,7 +96,9 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
   yAxisUnit
 }) => {
   const chartRef = useRef<HTMLDivElement | null>(null);
+  const modalChartRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [legendItems, setLegendItems] = useState<Array<{id: string, label: string, color: string}>>([]);
   
   // Brush state
   const [isBrushActive, setIsBrushActive] = useState(false);
@@ -105,6 +107,46 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
   // Filtered data based on brush
   const [filteredData, setFilteredData] = useState<any[]>([]);
 
+  // Modal-specific filtered data
+  const [modalFilteredData, setModalFilteredData] = useState<any[]>([]);
+
+  // Update tooltip state definition
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    left: number;
+    top: number;
+    key: string;
+    items: { label: string, value: string | number, color: string, shape?: 'circle' | 'square' }[];
+  }>({
+    visible: false,
+    left: 0,
+    top: 0,
+    key: '',
+    items: []
+  });
+
+  // Modal brush state
+  const [isModalBrushActive, setIsModalBrushActive] = useState(false);
+  const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
+  
+  // Add state for filter values in modal
+  const [modalFilterValues, setModalFilterValues] = useState<Record<string, string>>(filterValues || {});
+  
+  // Add state to track client-side rendering
+  const [isClient, setIsClient] = useState(false);
+
+  // Extract mapping fields
+  const xField = chartConfig.dataMapping.xAxis;
+  const yField = chartConfig.dataMapping.yAxis;
+  
+  // For type safety, ensure we use string values for indexing
+  const xKey = typeof xField === 'string' ? xField : xField[0];
+  
+  // Set isClient to true when component mounts in browser
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+  
   // Helper function to format X-axis tick labels
   const formatXAxisLabel = useCallback((value: string): string => {
     // Check if the value is a date format (YYYY-MM-DD or similar)
@@ -150,107 +192,7 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     // For other longer text, truncate with ellipsis
     return `${value.substring(0, 3)}...`;
   }, [filterValues]);
-  
-  // Update tooltip state definition
-  const [tooltip, setTooltip] = useState<{
-    visible: boolean;
-    left: number;
-    top: number;
-    key: string;
-    items: { label: string, value: string | number, color: string, shape?: 'circle' | 'square' }[];
-  }>({
-    visible: false,
-    left: 0,
-    top: 0,
-    key: '',
-    items: []
-  });
 
-  // Extract mapping fields
-  const xField = chartConfig.dataMapping.xAxis;
-  const yField = chartConfig.dataMapping.yAxis;
-  
-  // For type safety, ensure we use string values for indexing
-  const xKey = typeof xField === 'string' ? xField : xField[0];
-  
-  // Add state to track client-side rendering
-  const [isClient, setIsClient] = useState(false);
-  
-  // Modal-specific state
-  const modalChartRef = useRef<HTMLDivElement | null>(null);
-  const [modalFilteredData, setModalFilteredData] = useState<any[]>([]);
-  const [isModalBrushActive, setIsModalBrushActive] = useState(false);
-  const [modalBrushDomain, setModalBrushDomain] = useState<[Date, Date] | null>(null);
-  const [modalFilterValues, setModalFilterValues] = useState<Record<string, string>>(filterValues || {});
-  const [legendItems, setLegendItems] = useState<Array<{id: string, label: string, color: string}>>([]);
-  
-  // Helper function to force reset the brush visual state
-  const forceBrushVisualReset = useCallback((inModal = false) => {
-    setTimeout(() => {
-      let container: Document | Element = document;
-      
-      // For modal, only look within the modal container
-      if (inModal) {
-        const modalContainer = document.querySelector('.modal-backdrop');
-        if (!modalContainer) return;
-        container = modalContainer;
-        console.log('Modal container found for brush reset:', modalContainer);
-      }
-      
-      const brushElements = container.querySelectorAll('.visx-brush-selection');
-      console.log(`Found ${brushElements.length} brush elements in ${inModal ? 'modal' : 'main'} view`);
-      
-      if (brushElements.length > 0) {
-        console.log(`Forcing ${inModal ? 'modal ' : ''}brush visual reset`);
-        
-        // Reset the brush width to full width
-        brushElements.forEach(el => {
-          if (el instanceof SVGRectElement) {
-            const parentSVG = el.closest('svg');
-            if (parentSVG) {
-              // Find the actual width of the brush container
-              const brushGroup = parentSVG.querySelector('.visx-brush');
-              if (brushGroup) {
-                const brushWidth = brushGroup.getBoundingClientRect().width;
-                // Reset to full width with slight padding on both sides
-                el.setAttribute('width', String(brushWidth - 4));
-                el.setAttribute('x', '2');
-                console.log(`Reset brush to width: ${brushWidth - 4}, x: 2`);
-              }
-            }
-          }
-        });
-      }
-      
-      // Additional attempt for modal - look for SVG elements directly
-      if (inModal) {
-        const svgElements = container.querySelectorAll('svg');
-        svgElements.forEach(svg => {
-          const brushElements = svg.querySelectorAll('.visx-brush-selection');
-          if (brushElements.length > 0) {
-            console.log(`Found ${brushElements.length} brush elements in a specific SVG`);
-            brushElements.forEach(el => {
-              if (el instanceof SVGRectElement) {
-                const brushGroup = svg.querySelector('.visx-brush');
-                if (brushGroup) {
-                  const brushWidth = brushGroup.getBoundingClientRect().width;
-                  el.setAttribute('width', String(brushWidth - 4));
-                  el.setAttribute('x', '2');
-                  console.log(`Reset specific SVG brush to width: ${brushWidth - 4}, x: 2`);
-                }
-              }
-            });
-          }
-        });
-      }
-    }, 100);
-  }, []);
-  
-  // Set isClient to true when component mounts in browser
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-  
   // Format value for tooltip
   const formatValue = useCallback((value: number) => {
     // Add null/undefined check
@@ -305,7 +247,11 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
 
   // Extract data for the chart
   const { chartData, fields, fieldColors } = useMemo(() => {
-    const currentData = isBrushActive && filteredData.length > 0 ? filteredData : data;
+    // Use appropriate data based on context
+    const currentData = 
+      (isExpanded && isModalBrushActive && modalFilteredData.length > 0) ? modalFilteredData :
+      (!isExpanded && isBrushActive && filteredData.length > 0) ? filteredData : 
+      data;
     
     if (!currentData || currentData.length === 0) {
       return { chartData: [], fields: [], fieldColors: {} };
@@ -354,18 +300,37 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
       fields: allFields,
       fieldColors: colorMapping
     };
-  }, [data, filteredData, isBrushActive, xKey, yField, externalColorMap]);
+  }, [data, filteredData, modalFilteredData, isBrushActive, isModalBrushActive, xKey, yField, externalColorMap, isExpanded]);
 
-  // Handle mouse leave for tooltip
-  const handleMouseLeave = useCallback(() => {
-    if (tooltip.visible) {
-      setTooltip(prev => ({ ...prev, visible: false }));
+  // Utility to determine if a field belongs to the right axis
+  const isRightAxisField = useCallback((field: string): boolean => {
+    if (!chartConfig.dualAxisConfig) return false;
+    return chartConfig.dualAxisConfig.rightAxisFields.includes(field);
+  }, [chartConfig.dualAxisConfig]);
+
+  // Utility to check if a field should be rendered as a line
+  const shouldRenderAsLine = useCallback((field: string): boolean => {
+    if (!chartConfig.dualAxisConfig) return false;
+    
+    // Check field configuration in yField if available
+    if (Array.isArray(yField) && typeof yField[0] !== 'string') {
+      const fieldConfig = (yField as YAxisConfig[]).find(config => config.field === field);
+      if (fieldConfig) {
+        return fieldConfig.type === 'line';
+      }
     }
-  }, [tooltip.visible]);
-
+    
+    // Otherwise use axis type from dual axis config
+    const isRight = isRightAxisField(field);
+    return isRight ? 
+      chartConfig.dualAxisConfig.rightAxisType === 'line' : 
+      chartConfig.dualAxisConfig.leftAxisType === 'line';
+  }, [chartConfig.dualAxisConfig, yField, isRightAxisField]);
+  
   // Handle mouse move for tooltips
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = chartRef.current?.getBoundingClientRect();
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>, isModal = false) => {
+    const containerRef = isModal ? modalChartRef : chartRef;
+    const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
     // Get mouse position - use client coordinates for consistency
@@ -373,7 +338,9 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     const mouseY = e.clientY - rect.top;
     
     // Use current data based on brush state
-    const currentData = isBrushActive && filteredData.length > 0 ? filteredData : data;
+    const currentData = isModal 
+      ? (isModalBrushActive && modalFilteredData.length > 0 ? modalFilteredData : data)
+      : (isBrushActive && filteredData.length > 0 ? filteredData : data);
     
     // Check if we have data to work with
     if (currentData.length === 0) return;
@@ -429,20 +396,36 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
           const value = Number(dataPoint[field]);
           return !isNaN(value) && value > 0;
         })
-        .map(field => ({
-          label: field,
-          value: formatWithUnit(Number(dataPoint[field]) || 0, getYAxisUnit(field), yAxisUnit),
-          color: fieldColors[field] || blue,
-          shape: 'square' as 'square'
-        }));
+        .map(field => {
+          // Get the unit specific to this field only
+          const fieldUnit = getYAxisUnit(
+            // Look for this specific field in the yField array
+            Array.isArray(yField) 
+              ? yField.find(f => getYAxisField(f) === field) || field 
+              : field
+          );
+          
+          return {
+            label: field,
+            value: formatWithUnit(Number(dataPoint[field]) || 0, fieldUnit),
+            color: fieldColors[field] || blue,
+            shape: shouldRenderAsLine(field) ? 'circle' as 'circle' : 'square' as 'square'
+          };
+        });
       
       // If no values found, show placeholder
       if (tooltipItems.length === 0 && fields.length > 0) {
+        const firstFieldUnit = getYAxisUnit(
+          Array.isArray(yField) 
+            ? yField.find(f => getYAxisField(f) === fields[0]) || fields[0] 
+            : fields[0]
+        );
+        
         tooltipItems.push({
           label: fields[0],
-          value: "$0.00",
+          value: formatWithUnit(0, firstFieldUnit),
           color: fieldColors[fields[0]] || blue,
-          shape: 'square' as 'square'
+          shape: shouldRenderAsLine(fields[0]) ? 'circle' as 'circle' : 'square' as 'square'
         });
       }
       
@@ -462,34 +445,17 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
         top: tooltipTop
       }));
     }
-  }, [data, filteredData, isBrushActive, chartData, fields, xKey, fieldColors, formatValue, tooltip, getYAxisUnit, yAxisUnit]);
+  }, [data, filteredData, modalFilteredData, isBrushActive, isModalBrushActive, chartData, fields, xKey, yField, 
+      fieldColors, formatValue, tooltip.visible, tooltip.key, tooltip.items, shouldRenderAsLine, getYAxisUnit]);
 
-  // Utility to determine if a field belongs to the right axis
-  const isRightAxisField = useCallback((field: string): boolean => {
-    if (!chartConfig.dualAxisConfig) return false;
-    return chartConfig.dualAxisConfig.rightAxisFields.includes(field);
-  }, [chartConfig.dualAxisConfig]);
-
-  // Utility to check if a field should be rendered as a line
-  const shouldRenderAsLine = useCallback((field: string): boolean => {
-    if (!chartConfig.dualAxisConfig) return false;
-    
-    // Check field configuration in yField if available
-    if (Array.isArray(yField) && typeof yField[0] !== 'string') {
-      const fieldConfig = (yField as YAxisConfig[]).find(config => config.field === field);
-      if (fieldConfig) {
-        return fieldConfig.type === 'line';
-      }
+  // Handle mouse leave for tooltip
+  const handleMouseLeave = useCallback(() => {
+    if (tooltip.visible) {
+      setTooltip(prev => ({ ...prev, visible: false }));
     }
-    
-    // Otherwise use axis type from dual axis config
-    const isRight = isRightAxisField(field);
-    return isRight ? 
-      chartConfig.dualAxisConfig.rightAxisType === 'line' : 
-      chartConfig.dualAxisConfig.leftAxisType === 'line';
-  }, [chartConfig.dualAxisConfig, yField, isRightAxisField]);
+  }, [tooltip.visible]);
 
-  // Process brush data - simplify for just dual axis
+  // Process brush data
   const brushData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
@@ -538,8 +504,8 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     if (!domain) {
       if (isBrushActive) {
         setBrushDomain(null);
-        setIsBrushActive(true); // Keep active but reset to full range
-        setFilteredData(data); // Show all data
+        setIsBrushActive(false);
+        setFilteredData([]);
       }
       return;
     }
@@ -559,8 +525,54 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     if (!isBrushActive) {
       setIsBrushActive(true);
     }
-  }, [isBrushActive, brushData, data]);
-
+  }, [isBrushActive, brushData]);
+  
+  // Handle modal brush change
+  const handleModalBrushChange = useCallback((domain: any) => {
+    if (!domain) {
+      if (isModalBrushActive) {
+        setModalBrushDomain(null);
+        setIsModalBrushActive(false);
+        setModalFilteredData([]);
+      }
+      return;
+    }
+    
+    const { x0, x1 } = domain;
+    
+    // Update modal brush domain
+    setModalBrushDomain([new Date(x0), new Date(x1)]);
+    
+    // Filter data based on brush selection
+    const selectedItems = brushData
+      .filter(item => item.date >= new Date(x0) && item.date <= new Date(x1))
+      .map(item => item.originalData);
+      
+    setModalFilteredData(selectedItems);
+    
+    if (!isModalBrushActive) {
+      setIsModalBrushActive(true);
+    }
+  }, [isModalBrushActive, brushData]);
+  
+  // Enhanced filter change handler for modal
+  const handleModalFilterChange = useCallback((key: string, value: string) => {
+    console.log(`Modal filter changed: ${key} = ${value}`);
+    
+    const updatedFilters = {
+      ...modalFilterValues,
+      [key]: value
+    };
+    
+    // Update local state
+    setModalFilterValues(updatedFilters);
+    
+    // If onFilterChange exists in chartConfig, call it with updated filters
+    if (chartConfig.onFilterChange) {
+      chartConfig.onFilterChange(updatedFilters);
+    }
+  }, [modalFilterValues, chartConfig]);
+  
   // Update legend items based on chart data
   const updateLegendItems = useCallback(() => {
     if (fields.length > 0) {
@@ -594,180 +606,7 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     }
   }, [isExpanded, brushDomain, isBrushActive, filteredData, data, updateLegendItems]);
 
-  // Modal brush change handler
-  const handleModalBrushChange = useCallback((domain: any) => {
-    if (!domain) {
-      if (isModalBrushActive) {
-        setModalBrushDomain(null);
-        setIsModalBrushActive(true); // Keep active but reset to full range
-        setModalFilteredData(data); // Show all data
-      }
-      return;
-    }
-    
-    const { x0, x1 } = domain;
-    
-    // Update brush domain
-    setModalBrushDomain([new Date(x0), new Date(x1)]);
-    
-    // Filter data based on brush selection
-    const selectedItems = brushData
-      .filter(item => item.date >= new Date(x0) && item.date <= new Date(x1))
-      .map(item => item.originalData);
-      
-    setModalFilteredData(selectedItems);
-    
-    if (!isModalBrushActive) {
-      setIsModalBrushActive(true);
-    }
-  }, [isModalBrushActive, brushData, data]);
-
-  // Enhanced filter change handler for modal
-  const handleModalFilterChange = useCallback((key: string, value: string) => {
-    console.log(`Modal filter changed: ${key} = ${value}`);
-    
-    const updatedFilters = {
-      ...modalFilterValues,
-      [key]: value
-    };
-    
-    // Update local state
-    setModalFilterValues(updatedFilters);
-    
-    // Don't reset the brush when filters change - this will be handled by BrushTimeScale
-    
-    // If onFilterChange exists in chartConfig, call it with updated filters
-    if (chartConfig.onFilterChange) {
-      chartConfig.onFilterChange(updatedFilters);
-    }
-  }, [modalFilterValues, chartConfig]);
-
-  // Handle mouse move for tooltips specifically in modal
-  const handleModalMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = modalChartRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    // Get mouse position - use client coordinates for consistency
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    // Use current data based on modal brush state
-    const currentData = isModalBrushActive && modalFilteredData.length > 0 ? modalFilteredData : data;
-    
-    // Check if we have data to work with
-    if (currentData.length === 0) return;
-    
-    // Calculate available chart space for dual-axis chart
-    const margin = { top: 10, right: 25, bottom: 30, left: 40 };
-    const innerWidth = rect.width - margin.left - margin.right;
-    
-    // Adjust mouseX to account for margin
-    const adjustedMouseX = mouseX - margin.left;
-    
-    // Early exit if mouse is outside the chart area
-    if (adjustedMouseX < 0 || adjustedMouseX > innerWidth) {
-      if (tooltip.visible) {
-        setTooltip(prev => ({ ...prev, visible: false }));
-      }
-      return;
-    }
-    
-    // Create scale for finding nearest data point
-    const xScale = scaleBand<string>({
-      domain: currentData.map(d => d[xKey]),
-      range: [0, innerWidth],
-      padding: 0.2,
-    });
-    
-    // Calculate proper bar width
-    const barWidth = xScale.bandwidth();
-    
-    // Find the closest data point based on mouse position
-    let closestIndex = -1;
-    let minDistance = Infinity;
-    
-    currentData.forEach((d, i) => {
-      const barX = xScale(d[xKey]) || 0;
-      const barCenterX = barX + (barWidth / 2);
-      const distance = Math.abs(adjustedMouseX - barCenterX);
-      
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = i;
-      }
-    });
-    
-    // Validate the index
-    if (closestIndex < 0 || closestIndex >= currentData.length) {
-      if (tooltip.visible) {
-        setTooltip(prev => ({ ...prev, visible: false }));
-      }
-      return;
-    }
-    
-    // Get the data point at the closest index
-    const dataPoint = currentData[closestIndex];
-    if (!dataPoint) {
-      if (tooltip.visible) {
-        setTooltip(prev => ({ ...prev, visible: false }));
-      }
-      return;
-    }
-
-    const xValue = dataPoint[xKey];
-    
-    // Calculate tooltip position - use mouse position directly
-    const tooltipLeft = mouseX;
-    const tooltipTop = Math.max(mouseY - 10, 10);
-    
-    // Only update if showing a new x-value or hiding previous one
-    if (!tooltip.visible || tooltip.key !== xValue) {
-      // For dual-axis, show all field values
-      const tooltipItems = fields
-        .filter(field => {
-          // Only include fields with non-zero values
-          const value = Number(dataPoint[field]);
-          return !isNaN(value) && value > 0;
-        })
-        .map(field => ({
-          label: field,
-          value: formatWithUnit(Number(dataPoint[field]) || 0, getYAxisUnit(field), yAxisUnit),
-          color: fieldColors[field] || blue,
-          shape: shouldRenderAsLine(field) ? 'circle' as 'circle' : 'square' as 'square'
-        }));
-      
-      // If no values found, show placeholder
-      if (tooltipItems.length === 0 && fields.length > 0) {
-        tooltipItems.push({
-          label: fields[0],
-          value: "$0.00",
-          color: fieldColors[fields[0]] || blue,
-          shape: shouldRenderAsLine(fields[0]) ? 'circle' as 'circle' : 'square' as 'square'
-        });
-      }
-      
-      // Update the tooltip
-      setTooltip({
-        visible: true,
-        key: xValue,
-        items: tooltipItems,
-        left: tooltipLeft,
-        top: tooltipTop
-      });
-    } else {
-      // If tooltip content isn't changing, just update position
-      setTooltip(prev => ({
-        ...prev,
-        left: tooltipLeft,
-        top: tooltipTop
-      }));
-    }
-  }, [
-    data, modalFilteredData, isModalBrushActive, fields, xKey, fieldColors, 
-    formatValue, tooltip, shouldRenderAsLine, getYAxisUnit, yAxisUnit
-  ]);
-
-  // Render content function
+  // Render chart content function
   const renderChartContent = useCallback((chartWidth: number, chartHeight: number, isModal = false) => {
     // Show error state or no data
     if (error || chartData.length === 0) {
@@ -902,7 +741,9 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     })();
     
     // Use appropriate handlers based on modal state
-    const mouseMoveFn = isModal ? handleModalMouseMove : handleMouseMove;
+    const mouseMoveFn = isModal 
+      ? (e: React.MouseEvent<HTMLDivElement>) => handleMouseMove(e, true) 
+      : (e: React.MouseEvent<HTMLDivElement>) => handleMouseMove(e, false);
     
     // Render the chart content
     return (
@@ -921,6 +762,7 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
             top={tooltip.top}
             isModal={false}
             timeFilter={filterValues?.timeFilter}
+            currencyFilter={filterValues?.currencyFilter}
           />
         )}
         
@@ -1092,7 +934,7 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
         </svg>
         
         {/* Display tooltip at the container level for modal views */}
-        {tooltip.visible && tooltip.items && (
+        {tooltip.visible && tooltip.items && isModal && (
           <div className="absolute z-50" style={{ 
             pointerEvents: 'none',
             top: tooltip.top,
@@ -1105,6 +947,7 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
               top={0}
               isModal={true}
               timeFilter={modalFilterValues?.timeFilter || filterValues?.timeFilter}
+              currencyFilter={modalFilterValues?.currencyFilter || filterValues?.currencyFilter}
             />
           </div>
         )}
@@ -1112,176 +955,182 @@ const DualAxisChart: React.FC<DualAxisChartProps> = ({
     );
   }, [
     chartData, fields, xKey, error, refreshData, 
-    handleMouseMove, handleModalMouseMove, handleMouseLeave,
-    tooltip, fieldColors, isRightAxisField, shouldRenderAsLine, formatTickValue,
-    isBrushActive, isModalBrushActive, filteredData, modalFilteredData, data, yAxisUnit
+    handleMouseMove, handleMouseLeave,
+    tooltip, fieldColors, isRightAxisField, shouldRenderAsLine, formatTickValue, formatXAxisLabel,
+    isBrushActive, isModalBrushActive, filteredData, modalFilteredData, data, yAxisUnit, 
+    filterValues, modalFilterValues
   ]);
 
-  // Render the chart with brush
-  return (
-    <>
-      {/* Expanded view in modal */}
-      {isExpanded && isClient ? (
-        <Modal 
-          isOpen={isExpanded} 
-          onClose={onCloseExpanded || (() => {})}
-          title={chartConfig.title || "Chart View"}
-          subtitle={chartConfig.subtitle}
-        >
-          <div className="w-full h-[80vh] relative overflow-visible">
-            {/* Filters row */}
-            <div className="mb-4 flex justify-between items-center">
-              <div className="flex items-center space-x-4">
-                {/* Time filter */}
-                {chartConfig.additionalOptions?.filters?.timeFilter && (
-                  <div className="flex items-center">
-                    <TimeFilterSelector
-                      value={modalFilterValues?.timeFilter || chartConfig.additionalOptions.filters.timeFilter.activeValue || 'M'}
-                      onChange={(value) => handleModalFilterChange('timeFilter', value)}
-                      options={chartConfig.additionalOptions.filters.timeFilter.options?.map((opt: string) => ({
-                        value: opt,
-                        label: opt
-                      }))}
-                    />
-                  </div>
-                )}
-                
-                {/* Currency filter */}
-                {chartConfig.additionalOptions?.filters?.currencyFilter && (
-                  <CurrencyFilter
-                    currency={modalFilterValues?.currencyFilter || chartConfig.additionalOptions.filters.currencyFilter.activeValue || 'USD'}
-                    onChange={(value) => handleModalFilterChange('currencyFilter', value)}
-                    options={chartConfig.additionalOptions.filters.currencyFilter.options}
-                    
+  // Render the brush with time scale
+  const renderBrushArea = useCallback((modalView = false) => {
+    if (!brushData || brushData.length === 0) return null;
+    
+    return (
+      <div className="h-[15%] w-full mt-2">
+        <BrushTimeScale
+          data={brushData}
+          activeBrushDomain={modalView ? modalBrushDomain : brushDomain}
+          onBrushChange={modalView ? handleModalBrushChange : handleBrushChange}
+          onClearBrush={() => {
+            if (modalView) {
+              setModalBrushDomain(null);
+              setIsModalBrushActive(false);
+              setModalFilteredData([]);
+            } else {
+              setBrushDomain(null);
+              setIsBrushActive(false);
+              setFilteredData([]);
+            }
+          }}
+          getDate={(d) => d.date}
+          getValue={(d) => d.value}
+          lineColor="#60a5fa"
+          margin={{ top: 0, right: 25, bottom: 20, left: 30 }}
+          isModal={modalView}
+          curveType="catmullRom"
+          strokeWidth={1.5}
+          filterValues={modalView ? modalFilterValues : filterValues}
+        />
+      </div>
+    );
+  }, [
+    brushData, modalBrushDomain, brushDomain, 
+    handleModalBrushChange, handleBrushChange,
+    modalFilterValues, filterValues
+  ]);
+
+  // When rendering the chart in expanded mode, use the Modal component
+  if (isExpanded) {
+    // Only render Modal on client-side to prevent hydration errors
+    if (!isClient) {
+      return <div className="w-full h-full flex items-center justify-center">Loading expanded view...</div>;
+    }
+    
+    // Render expanded view inside Modal
+    return (
+      <Modal 
+        isOpen={isExpanded} 
+        onClose={onCloseExpanded || (() => {})}
+        title={chartConfig.title || "Chart View"}
+        subtitle={chartConfig.subtitle}
+      >
+        <div className="w-full h-[80vh] relative overflow-visible">
+          {/* Filters row */}
+          <div className="mb-4 flex justify-between items-center">
+            <div className="flex items-center space-x-4">
+              {/* Time filter */}
+              {chartConfig.additionalOptions?.filters?.timeFilter && (
+                <div className="flex items-center">
+                  <TimeFilterSelector
+                    value={modalFilterValues?.timeFilter || chartConfig.additionalOptions.filters.timeFilter.activeValue || 'M'}
+                    onChange={(value) => handleModalFilterChange('timeFilter', value)}
+                    options={chartConfig.additionalOptions.filters.timeFilter.options?.map((opt: string) => ({
+                      value: opt,
+                      label: opt
+                    }))}
                   />
-                )}
-                
-                {/* Display mode filter */}
-                {chartConfig.additionalOptions?.filters?.displayModeFilter && (
-                  <div className="flex items-center">
-                    <DisplayModeFilter
-                      mode={(modalFilterValues?.displayMode || chartConfig.additionalOptions.filters.displayModeFilter.activeValue || 'absolute') as DisplayMode}
-                      onChange={(value) => handleModalFilterChange('displayMode', value)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Horizontal line below filters */}
-            <div className="w-full h-px bg-gray-900 mb-4"></div>
-            
-            {/* Chart with legends */}
-            <div className="flex h-full">
-              {/* Chart area - 90% width */}
-              <div className="w-[90%] h-[90%] pr-3 border-r border-gray-900">
-                <div className="flex flex-col h-full">
-                  {/* Main chart - 85% height */}
-                  <div className="h-[85%] w-full relative" ref={modalChartRef}>
-                    <ParentSize debounceTime={10}>
-                      {({ width: parentWidth, height: parentHeight }) => 
-                        parentWidth > 0 && parentHeight > 0 
-                          ? renderChartContent(parentWidth, parentHeight, true)
-                          : null
-                      }
-                    </ParentSize>
-                  </div>
-                  
-                  {/* Brush component - 15% height */}
-                  {brushData.length > 0 ? (
-                    <div className="h-[15%] w-full mt-2">
-                      <BrushTimeScale
-                        data={brushData}
-                        activeBrushDomain={brushDomain}
-                        onBrushChange={handleBrushChange}
-                        onClearBrush={() => {
-                          setBrushDomain(null);
-                          setIsBrushActive(true); // Keep active but reset to full range
-                          setFilteredData(data); // Show all data
-                        }}
-                        getDate={(d) => d.date}
-                        getValue={(d) => d.value}
-                        lineColor="#60a5fa"
-                        margin={{ top: 0, right: 25, bottom: 20, left: 30 }}
-                        isModal={false}
-                        curveType="catmullRom"
-                        strokeWidth={1.5}
-                        filterValues={filterValues}
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-[15%] w-full flex items-center justify-center text-gray-500 text-sm">
-                      No brush data available
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
               
-              {/* Legend area - 10% width */}
-              <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
-                {/* Show legend items */}
-                <div className="space-y-2 w-full overflow-y-auto max-h-[600px]
-                  [&::-webkit-scrollbar]:w-1.5 
-                  [&::-webkit-scrollbar-track]:bg-transparent 
-                  [&::-webkit-scrollbar-thumb]:bg-gray-700/40
-                  [&::-webkit-scrollbar-thumb]:rounded-full
-                  [&::-webkit-scrollbar-thumb]:hover:bg-gray-600/60
-                  scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-700/40">
-                  {legendItems.map(item => (
-                    <LegendItem 
-                      key={item.id} 
-                      label={item.label}
-                      color={item.color}
-                      shape={shouldRenderAsLine(item.id) ? 'circle' : 'square'}
-                    />
-                  ))}
+              {/* Currency filter */}
+              {chartConfig.additionalOptions?.filters?.currencyFilter && (
+                <CurrencyFilter
+                  currency={modalFilterValues?.currencyFilter || chartConfig.additionalOptions.filters.currencyFilter.activeValue || 'USD'}
+                  onChange={(value) => handleModalFilterChange('currencyFilter', value)}
+                  options={chartConfig.additionalOptions.filters.currencyFilter.options}
+                  
+                />
+              )}
+              
+              {/* Display mode filter */}
+              {chartConfig.additionalOptions?.filters?.displayModeFilter && (
+                <div className="flex items-center">
+                  <DisplayModeFilter
+                    mode={(modalFilterValues?.displayMode || chartConfig.additionalOptions.filters.displayModeFilter.activeValue || 'absolute') as DisplayMode}
+                    onChange={(value) => handleModalFilterChange('displayMode', value)}
+                  />
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-        </Modal>
-      ) : (
-        // Normal view with brush
-        <div className="w-full h-full relative">
-          <div className="h-[85%] w-full">
-            <ParentSize debounceTime={10}>
-              {({ width: parentWidth, height: parentHeight }) => 
-                parentWidth > 0 && parentHeight > 0 
-                  ? renderChartContent(parentWidth, parentHeight)
-                  : null
-              }
-            </ParentSize>
           </div>
           
-          {brushData.length > 0 ? (
-            <div className="h-[15%] w-full mt-2">
-              <BrushTimeScale
-                data={brushData}
-                activeBrushDomain={brushDomain}
-                onBrushChange={handleBrushChange}
-                onClearBrush={() => {
-                  setBrushDomain(null);
-                  setIsBrushActive(true); // Keep active but reset to full range
-                  setFilteredData(data); // Show all data
-                }}
-                getDate={(d) => d.date}
-                getValue={(d) => d.value}
-                lineColor="#60a5fa"
-                margin={{ top: 0, right: 25, bottom: 20, left: 30 }}
-                isModal={false}
-                curveType="catmullRom"
-                strokeWidth={1.5}
-                filterValues={filterValues}
-              />
+          {/* Horizontal line below filters */}
+          <div className="w-full h-px bg-gray-900 mb-4"></div>
+          
+          {/* Chart with legends */}
+          <div className="flex h-full">
+            {/* Chart area - 90% width */}
+            <div className="w-[90%] h-[90%] pr-3 border-r border-gray-900">
+              <div className="flex flex-col h-full">
+                {/* Main chart - 85% height */}
+                <div className="h-[85%] w-full relative" ref={modalChartRef}>
+                  <ParentSize debounceTime={10}>
+                    {({ width: parentWidth, height: parentHeight }) => 
+                      parentWidth > 0 && parentHeight > 0 
+                        ? renderChartContent(parentWidth, parentHeight, true)
+                        : null
+                    }
+                  </ParentSize>
+                </div>
+                
+                {/* Brush component - 15% height */}
+                {brushData.length > 0 ? (
+                  renderBrushArea(true)
+                ) : (
+                  <div className="h-[15%] w-full flex items-center justify-center text-gray-500 text-sm">
+                    No brush data available
+                  </div>
+                )}
+              </div>
             </div>
-          ) : (
-            <div className="h-[15%] w-full flex items-center justify-center text-gray-500 text-sm">
-              No brush data available
+            
+            {/* Legend area - 10% width */}
+            <div className="w-[10%] h-full pl-3 flex flex-col justify-start items-start">
+              {/* Show legend items */}
+              <div className="space-y-2 w-full overflow-y-auto max-h-[600px]
+                [&::-webkit-scrollbar]:w-1.5 
+                [&::-webkit-scrollbar-track]:bg-transparent 
+                [&::-webkit-scrollbar-thumb]:bg-gray-700/40
+                [&::-webkit-scrollbar-thumb]:rounded-full
+                [&::-webkit-scrollbar-thumb]:hover:bg-gray-600/60
+                scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-700/40">
+                {legendItems.map(item => (
+                  <LegendItem 
+                    key={item.id} 
+                    label={item.label}
+                    color={item.color}
+                    shape={shouldRenderAsLine(item.id) ? 'circle' : 'square'}
+                  />
+                ))}
+              </div>
             </div>
-          )}
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
+  // Render normal view with brush
+  return (
+    <div className="w-full h-full relative">
+      <div className="h-[85%] w-full">
+        <ParentSize debounceTime={10}>
+          {({ width: parentWidth, height: parentHeight }) => 
+            parentWidth > 0 && parentHeight > 0 
+              ? renderChartContent(parentWidth, parentHeight)
+              : null
+          }
+        </ParentSize>
+      </div>
+      
+      {brushData.length > 0 ? (
+        renderBrushArea(false)
+      ) : (
+        <div className="h-[15%] w-full mt-2 flex items-center justify-center text-gray-500 text-sm">
+          No brush data available
         </div>
       )}
-    </>
+    </div>
   );
 };
 

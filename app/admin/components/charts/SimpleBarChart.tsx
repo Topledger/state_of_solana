@@ -164,7 +164,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
     
     // Return with correct unit placement (or no unit if not specified)
     if (!unitSymbol) return formattedValue;
-    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}${unitSymbol}`;
+    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}\u00A0${unitSymbol}`;
   }, []);
 
   // Format y-axis tick value with appropriate units
@@ -822,6 +822,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
             top={tooltip.top}
             isModal={false}
             timeFilter={filterValues?.timeFilter}
+            currencyFilter={filterValues?.currencyFilter}
           />
         )}
         
@@ -1168,6 +1169,7 @@ const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
                       top={0}
                       isModal={true}
                       timeFilter={modalFilterValues?.timeFilter || filterValues?.timeFilter}
+                      currencyFilter={modalFilterValues?.currencyFilter || filterValues?.currencyFilter}
                     />
                   </div>
                 )}

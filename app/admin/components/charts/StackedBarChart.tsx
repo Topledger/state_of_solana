@@ -183,7 +183,7 @@ const StackedBarChart: React.FC<StackedBarChartProps> = ({
     
     // Return with correct unit placement (or no unit if not specified)
     if (!unitSymbol) return formattedValue;
-    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}${unitSymbol}`;
+    return isUnitPrefix ? `${unitSymbol}${formattedValue}` : `${formattedValue}\u00A0${unitSymbol}`;
   }, [yAxisUnit, displayMode]);
 
   // Format y-axis tick value with appropriate units
@@ -716,6 +716,7 @@ const StackedBarChart: React.FC<StackedBarChartProps> = ({
             top={tooltip.top}
             isModal={false}
             timeFilter={filterValues?.timeFilter}
+            currencyFilter={filterValues?.currencyFilter}
           />
         )}
         
@@ -1193,6 +1194,7 @@ const StackedBarChart: React.FC<StackedBarChartProps> = ({
                       top={0}
                       isModal={true}
                       timeFilter={modalFilterValues?.timeFilter || filterValues?.timeFilter}
+                      currencyFilter={modalFilterValues?.currencyFilter || filterValues?.currencyFilter}
                     />
                   </div>
                 )}
