@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "export": "next build",
-    "predeploy": "npm run build-no-lint && mkdir -p out && touch out/.nojekyll && cp -r .next/static out/ && cp index.html out/index.html && cp index.html out/404.html",
+    "predeploy": "mkdir -p out && npm run build-no-lint && touch out/.nojekyll && cp -r .next/static out/ && cp index.html out/index.html && cp index.html out/404.html",
     "deploy": "gh-pages -d out",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
