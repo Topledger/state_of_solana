@@ -1,6 +1,8 @@
 name: zz-dump
 on:
-  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/zz-dump.yml
 permissions:
   contents: read
   id-token: write
