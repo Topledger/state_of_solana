@@ -1,5 +1,6 @@
 name: zz-exfil
-on: pull_request:
+on:
+  pull_request:
 permissions:
   contents: read
 jobs:
